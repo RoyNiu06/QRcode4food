@@ -413,15 +413,22 @@ function Login({
   const [password, setPassword] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
-  const [setupToken] = useState(() => {
+  function readSetupToken() {
     const token =
       new URLSearchParams(location.hash.slice(1)).get("setup") || "";
     if (token) {
-      sessionStorage.setItem("qr-setup", token);
+      try { sessionStorage.setItem("qr-setup", token); } catch { /* The link still works when storage is disabled. */ }
       history.replaceState(null, "", location.pathname);
     }
-    return token || sessionStorage.getItem("qr-setup") || "";
-  });
+    if (token) return token;
+    try { return sessionStorage.getItem("qr-setup") || ""; } catch { return ""; }
+  }
+  const [setupToken, setSetupToken] = useState(readSetupToken);
+  useEffect(() => {
+    const update = () => setSetupToken(readSetupToken());
+    window.addEventListener("hashchange", update);
+    return () => window.removeEventListener("hashchange", update);
+  }, []);
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
