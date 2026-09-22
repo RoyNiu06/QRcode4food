@@ -1,0 +1,2 @@
+AUTH_SECRET="replace-with-a-random-local-development-value"
+SETUP_TOKEN="replace-with-a-local-setup-code"

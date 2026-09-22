@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
+test-results/
+playwright-report/
+artifacts/
+output/
+.playwright-cli/
+*.log
+*.dpapi
+admin-initialization*
