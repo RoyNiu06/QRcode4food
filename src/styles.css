@@ -3137,7 +3137,7 @@ img {
 .view-toggle { display:flex; gap:2px; padding:2px; border:1px solid #e3e5dc; border-radius:10px; background:white; }
 .view-toggle button { height:29px; width:31px; padding:0; border:0; background:transparent; }
 .view-toggle button.active { background:#ebeee5; color:#314732; }
-.favorite-button { border:0; background:transparent; color:#a7aaa0; display:grid; place-items:center; width:31px; height:31px; border-radius:50%; margin:-5px -5px -5px 0; }
+.favorite-button { position:absolute; top:15px; right:15px; border:0; background:transparent; color:#a7aaa0; display:grid; place-items:center; width:31px; height:31px; border-radius:50%; margin:0; }
 .favorite-button:hover,.favorite-button.is-favorite { color:#c54b38; background:#fff1ed; }
 .list-view { grid-template-columns:1fr; gap:8px; }
 .list-view .restaurant-card { display:grid; grid-template-columns:46px minmax(0,1fr) minmax(130px,auto); align-items:center; column-gap:14px; min-height:82px; padding:12px 15px; border-radius:12px; }
