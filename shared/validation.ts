@@ -5,6 +5,7 @@ export function textField(
   max: number,
   required = false,
 ): string {
+  if (!required && value == null) return "";
   if (typeof value !== "string") throw new InputError(`${label}格式不正确`);
   const result = value.trim();
   if ((required && !result) || result.length > max)
@@ -41,14 +42,12 @@ export function validateUrl(input: unknown): string {
   return raw;
 }
 export function validateRestaurant(input: Record<string, unknown>) {
-  const status = input.status;
+  const status = input.status ?? "draft";
   if (!["draft", "published", "disabled"].includes(String(status)))
     throw new InputError("请选择有效的发布状态");
   const sort = Number(input.sort_order ?? 0);
   if (!Number.isInteger(sort) || sort < 0 || sort > 9999)
     throw new InputError("排序应为 0 到 9999 的整数");
-  if (status === "published" && input.verified !== true)
-    throw new InputError("发布前请确认已打开网址并核对餐厅");
   const imageId =
     input.image_id == null || input.image_id === ""
       ? null
@@ -58,9 +57,14 @@ export function validateRestaurant(input: Record<string, unknown>) {
   return {
     name: textField(input.name, "餐厅名称", 80, true),
     address: textField(input.address, "地址", 160),
-    category: textField(input.category, "分类", 20, true),
+    category: textField(input.category, "分类", 20) || "其他",
     description: textField(input.description, "简介", 160),
-    url: validateUrl(input.url),
+    url:
+      input.url == null ||
+      input.url === "" ||
+      (typeof input.url === "string" && !input.url.trim())
+        ? ""
+        : validateUrl(input.url),
     image_id: imageId,
     status: status as "draft" | "published" | "disabled",
     sort_order: sort,

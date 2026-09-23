@@ -244,8 +244,8 @@ export default function AdminApp() {
               {!catalog.place.name && (
                 <div className="setup-callout">
                   <div>
-                    <strong>先告诉大家，这些好味道在哪里。</strong>
-                    <p>设置一个地点，作为餐厅目录的起点。</p>
+                    <strong>为目录添加一个地点</strong>
+                    <p>选填，不影响添加和发布餐厅。</p>
                   </div>
                   <button
                     className="secondary-button"
@@ -417,11 +417,19 @@ function Login({
     const token =
       new URLSearchParams(location.hash.slice(1)).get("setup") || "";
     if (token) {
-      try { sessionStorage.setItem("qr-setup", token); } catch { /* The link still works when storage is disabled. */ }
+      try {
+        sessionStorage.setItem("qr-setup", token);
+      } catch {
+        /* The link still works when storage is disabled. */
+      }
       history.replaceState(null, "", location.pathname);
     }
     if (token) return token;
-    try { return sessionStorage.getItem("qr-setup") || ""; } catch { return ""; }
+    try {
+      return sessionStorage.getItem("qr-setup") || "";
+    } catch {
+      return "";
+    }
   }
   const [setupToken, setSetupToken] = useState(readSetupToken);
   useEffect(() => {
@@ -545,11 +553,11 @@ function PasswordForm({
         新密码
         <input
           type="password"
-          minLength={10}
+          minLength={6}
           maxLength={128}
           autoComplete="new-password"
           required
-          placeholder="至少 10 位"
+          placeholder="至少 6 位，支持纯数字"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
@@ -558,7 +566,7 @@ function PasswordForm({
         再次输入新密码
         <input
           type="password"
-          minLength={10}
+          minLength={6}
           maxLength={128}
           autoComplete="new-password"
           required
@@ -619,9 +627,8 @@ function PlaceForm({
           />
         </label>
         <label className="field">
-          详细地址
+          详细地址 <span className="optional">选填</span>
           <input
-            required
             maxLength={160}
             placeholder="填写城市、街道与具体位置"
             value={form.address}
@@ -664,11 +671,12 @@ function RestaurantEditor({
     description: restaurant?.description || "",
     url: restaurant?.url || "",
     image_id: restaurant?.image_id || null,
-    status: (restaurant?.status || "draft") as RestaurantStatus,
+    status: (restaurant?.status === "disabled"
+      ? "disabled"
+      : "published") as RestaurantStatus,
     sort_order: restaurant?.sort_order || 0,
   });
-  const [verified, setVerified] = useState(false),
-    [busy, setBusy] = useState(false),
+  const [busy, setBusy] = useState(false),
     [uploading, setUploading] = useState(false),
     [error, setError] = useState(""),
     [uploadNote, setUploadNote] = useState("");
@@ -676,7 +684,6 @@ function RestaurantEditor({
       restaurant?.image_id ? `/media/${restaurant.image_id}` : "",
     ),
     [fileBlob, setFileBlob] = useState<Blob | null>(null);
-  const [openedUrl, setOpenedUrl] = useState("");
   const fileRef = useRef<HTMLInputElement>(null),
     objectRef = useRef("");
   const disabled = busy || uploading;
@@ -709,7 +716,7 @@ function RestaurantEditor({
         try {
           validateUrl(result.url);
           setForm((f) => ({ ...f, url: result.url }));
-          setUploadNote("已识别网址。请试打开并核对后发布。");
+          setUploadNote("网址已自动填入，可以直接发布。");
         } catch {
           setForm((f) => ({ ...f, url: "" }));
           setUploadNote(
@@ -720,8 +727,6 @@ function RestaurantEditor({
         setForm((f) => ({ ...f, url: "" }));
         setUploadNote(result.decodeError);
       }
-      setVerified(false);
-      setOpenedUrl("");
     } catch (e) {
       setError((e as Error).message);
       setUploadNote("");
@@ -734,7 +739,6 @@ function RestaurantEditor({
     try {
       const url = validateUrl(form.url);
       window.open(url, "_blank", "noopener,noreferrer");
-      setOpenedUrl(url);
       setError("");
     } catch (e) {
       setError((e as Error).message);
@@ -743,13 +747,13 @@ function RestaurantEditor({
   async function save(e: FormEvent) {
     e.preventDefault();
     setError("");
-    if (form.status === "published" && (!verified || openedUrl !== form.url)) {
-      setError("请先试打开网址，并确认这是无需桌号的点餐入口");
-      return;
-    }
+    const action = (e.nativeEvent as SubmitEvent).submitter?.getAttribute(
+      "value",
+    );
+    const status = (action || form.status) as RestaurantStatus;
     setBusy(true);
     try {
-      validateUrl(form.url);
+      const url = form.url.trim() ? validateUrl(form.url) : "";
       let imageId = form.image_id;
       if (fileBlob) {
         const result = await api<{ id: string }>("/api/admin/images", {
@@ -765,7 +769,7 @@ function RestaurantEditor({
         `/api/admin/restaurants${restaurant ? "/" + restaurant.id : ""}`,
         {
           method: restaurant ? "PUT" : "POST",
-          body: JSON.stringify({ ...form, image_id: imageId, verified }),
+          body: JSON.stringify({ ...form, url, status, image_id: imageId }),
         },
       );
       await onSaved();
@@ -778,18 +782,25 @@ function RestaurantEditor({
   return (
     <Modal
       wide
-      title={restaurant ? "编辑餐厅" : "添加一家好味道"}
+      title={restaurant ? "编辑餐厅" : "添加餐厅"}
       onClose={() => {
         if (!disabled) onClose();
       }}
     >
-      <form onSubmit={(e) => void save(e)}>
-        <div className="editor-grid">
-          <section>
-            <div className="editor-step">
-              <span>01</span>
-              <h3>上传点餐二维码</h3>
-            </div>
+      <form className="quick-editor" onSubmit={(e) => void save(e)}>
+        <p className="editor-intro">只需填写店名。上传点餐码，网址自动填好。</p>
+        <label className="field restaurant-name-field">
+          餐厅名称 <span className="required-tag">必填</span>
+          <input
+            required
+            maxLength={80}
+            placeholder="这家好味道叫什么？"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+          />
+        </label>
+        <div className="quick-entry-grid">
+          <section className="quick-upload">
             <input
               ref={fileRef}
               className="visually-hidden"
@@ -810,92 +821,87 @@ function RestaurantEditor({
                   <img src={preview} alt="上传的二维码预览" />
                   <span className="replace-image">
                     <Upload size={15} />
-                    重新选择图片
+                    更换二维码
                   </span>
                 </>
               ) : (
                 <>
                   <span className="upload-icon">
-                    <ImagePlus size={29} />
+                    <ImagePlus size={27} />
                   </span>
-                  <strong>点击选择二维码照片</strong>
-                  <span>支持相册与拍照</span>
-                  <small>JPG / PNG / WebP · 最大 10 MB</small>
+                  <strong>上传点餐二维码</strong>
+                  <span>从相册选择，自动识别网址</span>
+                  <small>选填 · JPG / PNG / WebP · 10 MB 内</small>
                 </>
               )}
             </button>
+          </section>
+          <section className="quick-link">
+            <label className="field">
+              点餐链接 <span className="optional">自动识别 / 选填</span>
+              <textarea
+                rows={3}
+                maxLength={4096}
+                placeholder="上传二维码自动填入，也可直接粘贴网址"
+                value={form.url}
+                onChange={(e) => setForm({ ...form, url: e.target.value })}
+              />
+            </label>
             {uploadNote && (
               <p
-                className={`upload-note ${uploading ? "processing" : ""}`}
+                className={`upload-note ${uploading ? "processing" : form.url ? "" : "decode-warning"}`}
                 role="status"
               >
                 {uploading ? (
                   <LoaderCircle className="spin" size={15} />
-                ) : (
+                ) : form.url ? (
                   <CircleCheck size={15} />
+                ) : (
+                  <ImagePlus size={15} />
                 )}
                 <span>{uploadNote}</span>
               </p>
             )}
-            <p className="field-hint">
-              请裁剪到一个清晰的二维码。仅收录无需桌号的通用点餐入口。
-            </p>
-            <label className="field">
-              点餐网址
-              <textarea
-                required
-                rows={3}
-                maxLength={4096}
-                placeholder="识别后自动填入，也可手动粘贴 https://…"
-                value={form.url}
-                onChange={(e) => {
-                  setForm({ ...form, url: e.target.value });
-                  setVerified(false);
-                  setOpenedUrl("");
-                }}
-              />
-            </label>
-            <button
-              type="button"
-              className="secondary-button full"
-              disabled={!form.url || disabled}
-              onClick={tryOpen}
-            >
-              试打开网址 <ExternalLink size={16} />
-            </button>
+            {form.url ? (
+              <button
+                type="button"
+                className="text-button preview-link"
+                disabled={disabled}
+                onClick={tryOpen}
+              >
+                试打开链接 <ExternalLink size={15} />
+              </button>
+            ) : (
+              <p className="field-hint">没有链接也能发布，之后随时补充。</p>
+            )}
             {form.url.startsWith("http:") && (
               <p className="notice warning">
-                该网址未使用 HTTPS，请确认商家仅提供此链接。
+                该链接使用 HTTP，请留意商家页面。
               </p>
             )}
           </section>
-          <section>
-            <div className="editor-step">
-              <span>02</span>
-              <h3>补充餐厅信息</h3>
-            </div>
-            <label className="field">
-              餐厅名称
-              <input
-                required
-                maxLength={80}
-                placeholder="让大家一眼找到这家店"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-              />
-            </label>
+        </div>
+        <details className="optional-details">
+          <summary>
+            <Settings2 size={17} />
+            <span>
+              更多信息 <small>位置、分类、介绍等，均可不填</small>
+            </span>
+            <Plus size={16} />
+          </summary>
+          <div className="optional-fields">
             <label className="field">
               位置 / 分店 <span className="optional">选填</span>
               <input
                 maxLength={160}
-                placeholder="例如：商场 2 楼 201 号"
+                placeholder="例如：商场 2 楼"
                 value={form.address}
                 onChange={(e) => setForm({ ...form, address: e.target.value })}
               />
             </label>
             <div className="field-columns">
               <label className="field">
-                分类
+                分类{" "}
                 <select
                   value={form.category}
                   onChange={(e) =>
@@ -908,7 +914,7 @@ function RestaurantEditor({
                 </select>
               </label>
               <label className="field">
-                排序
+                排序{" "}
                 <input
                   type="number"
                   min={0}
@@ -933,64 +939,53 @@ function RestaurantEditor({
                 }
               />
             </label>
-            <label className="field">
-              展示状态
-              <select
-                value={form.status}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    status: e.target.value as RestaurantStatus,
-                  })
-                }
-              >
-                <option value="draft">保存为草稿</option>
-                <option value="published">发布到首页</option>
-                <option value="disabled">暂时停用</option>
-              </select>
-            </label>
-            <label className="verification-check">
-              <input
-                type="checkbox"
-                checked={verified}
-                disabled={openedUrl !== form.url || !form.url}
-                onChange={(e) => setVerified(e.target.checked)}
-              />
-              <span>
-                我已试打开并核对：这是该餐厅无需桌号的通用网页点餐入口。
-              </span>
-            </label>
-            <p className="field-hint">
-              先点击左侧“试打开网址”，再勾选确认。发布后，访客点击即可直接点餐。
-            </p>
-          </section>
-        </div>
-        <ErrorNotice message={error} />
-        <div className="editor-footer">
-          <span>
-            <ShieldCheck size={15} />
-            仅已发布的餐厅对访客可见
-          </span>
+            {restaurant && (
+              <label className="field">
+                展示状态
+                <select
+                  value={form.status}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      status: e.target.value as RestaurantStatus,
+                    })
+                  }
+                >
+                  <option value="published">发布到首页</option>
+                  <option value="draft">草稿</option>
+                  <option value="disabled">暂时停用</option>
+                </select>
+              </label>
+            )}
+          </div>
+        </details>
+        <div className="quick-editor-footer">
+          <ErrorNotice message={error} />
           <div className="form-actions">
             <button
-              type="button"
+              type="submit"
+              value="draft"
               className="secondary-button"
               disabled={disabled}
-              onClick={onClose}
             >
-              取消
+              存为草稿
             </button>
-            <button className="primary-button" disabled={disabled}>
-              {busy
-                ? "正在保存…"
-                : form.status === "published"
-                  ? "保存并发布"
-                  : "保存餐厅"}
+            <button
+              type="submit"
+              value={form.status}
+              className="primary-button"
+              disabled={disabled}
+            >
               {busy ? (
                 <LoaderCircle className="spin" size={17} />
               ) : (
                 <Check size={17} />
               )}
+              {busy
+                ? "正在保存…"
+                : form.status === "published"
+                  ? "保存并发布"
+                  : "保存修改"}
             </button>
           </div>
         </div>

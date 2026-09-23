@@ -28,7 +28,7 @@ test("script, credential, local and literal IP URLs cannot be published", () => 
   ])
     assert.throws(() => validateUrl(value), value);
 });
-test("publish requires explicit verification, fields and bounded ordering", () => {
+test("publish only requires a name; optional metadata and URL may be omitted", () => {
   const data = {
     name: "示例餐厅",
     address: "",
@@ -40,7 +40,23 @@ test("publish requires explicit verification, fields and bounded ordering", () =
     sort_order: 0,
   };
   assert.equal(validateRestaurant(data).name, "示例餐厅");
-  assert.throws(() => validateRestaurant({ ...data, verified: false }));
+  assert.equal(
+    validateRestaurant({ name: "仅店名", status: "published" }).url,
+    "",
+  );
+  assert.equal(
+    validateRestaurant({ name: "仅店名", status: "published" }).address,
+    "",
+  );
+  assert.equal(validateRestaurant({ name: "仅店名" }).category, "其他");
+  assert.equal(
+    validateRestaurant({ ...data, url: "  ", verified: false }).url,
+    "",
+  );
+  assert.equal(validateRestaurant({ ...data, verified: false }).url, data.url);
+  assert.throws(() =>
+    validateRestaurant({ ...data, url: "javascript:alert(1)" }),
+  );
   assert.throws(() => validateRestaurant({ ...data, name: "" }));
   assert.throws(() => validateRestaurant({ ...data, sort_order: -1 }));
   assert.throws(() => validateRestaurant({ ...data, status: "anything" }));

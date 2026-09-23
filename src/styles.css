@@ -2268,3 +2268,184 @@ img {
     padding-bottom: 8px;
   }
 }
+
+/* A compact editor: one required field, one upload, one publish action. */
+.editor-intro {
+  margin: -10px 0 22px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.restaurant-name-field {
+  position: relative;
+}
+.restaurant-name-field input {
+  font-size: 19px;
+  font-weight: 600;
+  min-height: 54px;
+  background: #fffdf9;
+}
+.required-tag {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 400;
+}
+.quick-entry-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  gap: 26px;
+  align-items: start;
+  margin: 22px 0;
+}
+.quick-entry-grid > section {
+  min-width: 0;
+}
+.quick-editor .upload-zone {
+  height: 220px;
+  border-radius: 18px;
+  gap: 9px;
+}
+.quick-editor .upload-zone.has-preview {
+  background: #fffdf9;
+}
+.quick-link {
+  padding-top: 4px;
+}
+.quick-link textarea {
+  min-height: 110px;
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.quick-link .field {
+  margin-bottom: 8px;
+}
+.preview-link {
+  min-height: 44px;
+  color: var(--accent);
+}
+.upload-note.decode-warning {
+  color: #886120;
+}
+.optional-details {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fcfcf9;
+}
+.optional-details summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 62px;
+  padding: 12px 16px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 13px;
+}
+.optional-details summary::-webkit-details-marker {
+  display: none;
+}
+.optional-details summary > span {
+  flex: 1;
+}
+.optional-details summary small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+  margin-top: 4px;
+}
+.optional-details[open] summary > svg:last-child {
+  transform: rotate(45deg);
+}
+.optional-fields {
+  padding: 8px 16px 0;
+  border-top: 1px solid var(--line);
+}
+.quick-editor-footer {
+  position: sticky;
+  bottom: -28px;
+  padding: 16px 0 0;
+  margin-top: 8px;
+  background: #fff;
+  border-top: 1px solid var(--line);
+  z-index: 2;
+}
+.quick-editor-footer .form-actions {
+  margin-top: 0;
+}
+.quick-editor-footer .primary-button {
+  min-width: 180px;
+}
+.quick-editor-footer .notice {
+  margin: 0 0 12px;
+}
+.order-unavailable {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border-radius: 9px;
+  background: #f1f2ec;
+  color: var(--muted);
+  font-size: 12px;
+}
+@media (max-width: 600px) {
+  .quick-entry-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    margin: 16px 0;
+  }
+  .quick-editor .upload-zone {
+    height: 152px;
+    gap: 6px;
+    padding: 12px;
+  }
+  .quick-editor .upload-zone.has-preview {
+    height: 180px;
+    padding-bottom: 35px;
+  }
+  .quick-editor .upload-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 11px;
+  }
+  .quick-editor .upload-zone > small {
+    margin-top: 0;
+  }
+  .quick-link textarea {
+    min-height: 76px;
+    font-size: 16px;
+  }
+  .quick-link .field-hint {
+    margin: 8px 0 0;
+  }
+  .quick-editor .editor-intro {
+    margin-bottom: 16px;
+  }
+  .quick-editor-footer {
+    bottom: calc(-20px - env(safe-area-inset-bottom));
+    padding: 14px 0 calc(12px + env(safe-area-inset-bottom));
+  }
+  .quick-editor-footer .form-actions {
+    display: grid;
+    grid-template-columns: 1fr 1.5fr;
+    gap: 10px;
+  }
+  .quick-editor-footer .primary-button {
+    min-width: 0;
+  }
+  .quick-editor-footer button {
+    min-height: 48px;
+    padding: 12px;
+  }
+  .optional-details summary {
+    min-height: 58px;
+  }
+}
+.required-tag {
+  position: absolute;
+  right: 0;
+  top: 1px;
+}

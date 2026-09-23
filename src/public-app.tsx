@@ -209,23 +209,27 @@ export function PublicApp() {
                   </div>
                   <h3>{r.name}</h3>
                   <p className="restaurant-address">
-                    <MapPin size={14} />
-                    <span>{r.address || data?.place.name}</span>
+                    {(r.address || data?.place.name) && <MapPin size={14} />}
+                    <span>{r.address || data?.place.name || ""}</span>
                   </p>
                   <p className="restaurant-description">
                     {r.description || "把喜欢的味道，安排进今天。"}
                   </p>
                   <div className="card-actions">
-                    <a
-                      className="order-button"
-                      href={r.url}
-                      rel="noreferrer"
-                      onClick={() =>
-                        remember("qr-scroll", String(window.scrollY))
-                      }
-                    >
-                      开始点餐 <ExternalIcon />
-                    </a>
+                    {r.url ? (
+                      <a
+                        className="order-button"
+                        href={r.url}
+                        rel="noreferrer"
+                        onClick={() =>
+                          remember("qr-scroll", String(window.scrollY))
+                        }
+                      >
+                        开始点餐 <ExternalIcon />
+                      </a>
+                    ) : (
+                      <span className="order-unavailable">点餐入口待补充</span>
+                    )}
                     {r.image_id && (
                       <button
                         className="qr-button"
@@ -287,20 +291,33 @@ export function PublicApp() {
               alt={`${selected.name}的点餐二维码`}
             />
           </div>
-          <p className="modal-description">也可以直接点餐，无需再次扫码。</p>
-          <a
-            className="primary-button full"
-            href={selected.url}
-            rel="noreferrer"
-          >
-            开始点餐 <ExternalIcon />
-          </a>
-          <button className="secondary-button full" onClick={() => void copy()}>
-            {copied ? <Check size={17} /> : <Copy size={17} />}{" "}
-            {copied ? "链接已复制" : "复制点餐链接"}
-          </button>
-          <ErrorNotice message={copyError} />
-          {copyError && <p className="break-url">{selected.url}</p>}
+          {selected.url ? (
+            <>
+              <p className="modal-description">
+                也可以直接点餐，无需再次扫码。
+              </p>
+              <a
+                className="primary-button full"
+                href={selected.url}
+                rel="noreferrer"
+              >
+                开始点餐 <ExternalIcon />
+              </a>
+              <button
+                className="secondary-button full"
+                onClick={() => void copy()}
+              >
+                {copied ? <Check size={17} /> : <Copy size={17} />}{" "}
+                {copied ? "链接已复制" : "复制点餐链接"}
+              </button>
+              <ErrorNotice message={copyError} />
+              {copyError && <p className="break-url">{selected.url}</p>}
+            </>
+          ) : (
+            <p className="modal-description">
+              点餐链接待补充，可先查看或保存二维码。
+            </p>
+          )}
         </Modal>
       )}
     </div>

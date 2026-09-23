@@ -123,7 +123,7 @@ await request(
   "/api/admin/restaurants/" + item.id,
   "PUT",
   { ...data, status: "published" },
-  400,
+  200,
 );
 await request("/api/admin/restaurants/" + item.id, "PUT", {
   ...data,

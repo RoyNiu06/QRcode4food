@@ -266,14 +266,7 @@ async function route(
       )
     )
       throw new HttpError("当前密码不正确", 400);
-    if (
-      password.length < 10 ||
-      password === oldPassword ||
-      /^([\s\S])\1+$/.test(password)
-    )
-      throw new InputError(
-        "新密码至少 10 位，且不能与原密码相同或由重复字符组成",
-      );
+    if (password.length < 6) throw new InputError("密码至少 6 位");
     const salt = randomToken(),
       hash = await passwordHash(password, salt, env.AUTH_SECRET);
     const result = await env.DB.prepare(
@@ -305,7 +298,7 @@ async function route(
       const input = await body(request);
       const place = {
         name: textField(input.name, "地点名称", 80, true),
-        address: textField(input.address, "地点地址", 160, true),
+        address: textField(input.address, "地点地址", 160),
         description: textField(input.description, "地点说明", 160),
       };
       await env.DB.prepare(
@@ -335,13 +328,6 @@ async function route(
     }
     if (path === "/api/admin/restaurants" && method === "POST") {
       const data = validateRestaurant(await body(request));
-      if (data.status === "published") {
-        const place = await env.DB.prepare(
-          "SELECT name,address FROM settings WHERE id=1",
-        ).first<Place>();
-        if (!place?.name || !place.address)
-          throw new InputError("请先在地点设置中填写名称和地址");
-      }
       if (
         data.image_id &&
         !(await env.DB.prepare("SELECT id FROM images WHERE id=?")
@@ -364,7 +350,7 @@ async function route(
           data.image_id,
           data.status,
           data.sort_order,
-          data.status === "published" ? now : null,
+          null,
           now,
           now,
         )
@@ -394,13 +380,6 @@ async function route(
           .first())
       )
         throw new InputError("图片不存在，请重新上传");
-      if (data.status === "published") {
-        const place = await env.DB.prepare(
-          "SELECT name,address FROM settings WHERE id=1",
-        ).first<Place>();
-        if (!place?.name || !place.address)
-          throw new InputError("请先设置地点名称和地址");
-      }
       const now = new Date().toISOString();
       await env.DB.prepare(
         "UPDATE restaurants SET name=?,address=?,category=?,description=?,url=?,image_id=?,status=?,sort_order=?,verified_at=?,updated_at=? WHERE id=?",
@@ -414,7 +393,7 @@ async function route(
           data.image_id,
           data.status,
           data.sort_order,
-          data.status === "published" ? now : existing.verified_at,
+          data.url === existing.url ? existing.verified_at : null,
           now,
           existing.id,
         )
