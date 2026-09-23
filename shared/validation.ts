@@ -76,3 +76,32 @@ export function validateRestaurant(input: Record<string, unknown>) {
     sort_order: sort,
   };
 }
+export function validateWindow(input: Record<string, unknown>) {
+  const sort = Number(input.sort_order ?? 0);
+  if (!Number.isInteger(sort) || sort < 0 || sort > 9999)
+    throw new InputError("排序应为 0 到 9999 的整数");
+  const imageId = input.image_id == null || input.image_id === ""
+    ? null : textField(input.image_id, "图片编号", 80, true);
+  if (imageId && !/^[a-f0-9-]{36}$/.test(imageId))
+    throw new InputError("图片编号不正确");
+  const rawUrl = textField(input.url, "点餐网址", 4096);
+  return {
+    name: textField(input.name, "窗口名称", 80, true),
+    url: rawUrl ? validateUrl(rawUrl) : "",
+    image_id: imageId,
+    sort_order: sort,
+  };
+}
+export function validateContribution(input: Record<string, unknown>) {
+  const restaurantId = input.restaurant_id == null || input.restaurant_id === ""
+    ? null : textField(input.restaurant_id, "餐厅编号", 80, true);
+  if (restaurantId && !/^[a-f0-9-]{36}$/.test(restaurantId))
+    throw new InputError("餐厅编号不正确");
+  const rawUrl = textField(input.url, "点餐网址", 4096);
+  return {
+    restaurant_id: restaurantId,
+    restaurant_name: textField(input.restaurant_name, "餐厅名称", 80, true),
+    window_name: textField(input.window_name, "窗口名称", 80),
+    url: rawUrl ? validateUrl(rawUrl) : "",
+  };
+}

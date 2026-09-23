@@ -10,6 +10,7 @@ import {
   Utensils,
   RefreshCw,
   Dices,
+  UsersRound,
 } from "lucide-react";
 import type { Catalog, Restaurant } from "../shared/types";
 import {
@@ -19,6 +20,7 @@ import {
   useLocale,
 } from "./locale";
 import { Raffle } from "./raffle";
+import { Contribute } from "./contribute";
 import {
   api,
   Brand,
@@ -54,6 +56,8 @@ export function PublicApp() {
     [category, setCategory] = useState(() => saved("qr-category") || "全部");
   const [selected, setSelected] = useState<Restaurant | null>(null),
     [raffleOpen, setRaffleOpen] = useState(false),
+    [contributeOpen, setContributeOpen] = useState(false),
+    [menuRestaurant, setMenuRestaurant] = useState<Restaurant | null>(null),
     [copied, setCopied] = useState(false),
     [copyError, setCopyError] = useState("");
   async function load() {
@@ -97,7 +101,7 @@ export function PublicApp() {
       data?.restaurants.filter(
         (r) =>
           (category === "全部" || r.category === category) &&
-          `${r.name} ${r.name_zh_hant} ${r.name_en} ${r.address} ${r.address_zh_hant} ${r.address_en} ${r.description} ${r.description_zh_hant} ${r.description_en} ${r.category} ${t(r.category)}`
+          `${r.name} ${r.name_zh_hant} ${r.name_en} ${r.address} ${r.address_zh_hant} ${r.address_en} ${r.description} ${r.description_zh_hant} ${r.description_en} ${r.category} ${t(r.category)} ${r.windows.map((w) => w.name).join(" ")}`
             .toLowerCase()
             .includes(query.trim().toLowerCase()),
       ) || [],
@@ -193,6 +197,9 @@ export function PublicApp() {
               <span>{t("今天吃什么")}</span>
               <ArrowRight size={15} />
             </button>
+            <button type="button" className="contribute-entry" onClick={() => setContributeOpen(true)}>
+              <UsersRound size={16} /> {t("一起补充")}
+            </button>
           </div>
           {loading ? (
             <div
@@ -245,7 +252,11 @@ export function PublicApp() {
                       t("把喜欢的味道，安排进今天。")}
                   </p>
                   <div className="card-actions">
-                    {r.url ? (
+                    {r.windows.length ? (
+                      <button className="order-button" onClick={() => setMenuRestaurant(r)}>
+                        {t("选择点餐窗口")} <ArrowRight size={18} />
+                      </button>
+                    ) : r.url ? (
                       <a
                         className="order-button"
                         href={r.url}
@@ -318,8 +329,11 @@ export function PublicApp() {
         <Raffle
           restaurants={data?.restaurants || []}
           onClose={() => setRaffleOpen(false)}
+          onChooseRestaurant={setMenuRestaurant}
         />
       )}
+      {contributeOpen && <Contribute restaurants={data?.restaurants || []} onClose={() => setContributeOpen(false)} />}
+      {menuRestaurant && <WindowMenu restaurant={menuRestaurant} onClose={() => setMenuRestaurant(null)} />}
       {selected && (
         <Modal
           title={localizedRestaurant(selected, "name", locale)}
@@ -362,6 +376,31 @@ export function PublicApp() {
       )}
     </div>
   );
+}
+function WindowMenu({ restaurant, onClose }: { restaurant: Restaurant; onClose: () => void }) {
+  const { locale, t } = useLocale();
+  const [image, setImage] = useState<string | null>(null);
+  const entries = [
+    ...(restaurant.url || restaurant.image_id ? [{
+      id: restaurant.id, name: t("主点餐入口"), url: restaurant.url,
+      image_id: restaurant.image_id,
+    }] : []),
+    ...restaurant.windows,
+  ];
+  return <Modal title={localizedRestaurant(restaurant, "name", locale)} onClose={onClose}>
+    <div className="window-menu">
+      <p>{t("选择窗口，直接打开对应的点餐页面。")}</p>
+      {entries.map((entry, index) => <div className="window-choice" key={entry.id}>
+        <span className="window-index">{String(index + 1).padStart(2, "0")}</span>
+        <strong>{entry.name}</strong>
+        {entry.url ? <a className="primary-button" href={entry.url} rel="noreferrer">
+          {t("开始点餐")} <ExternalIcon />
+        </a> : <span className="order-unavailable">{t("点餐入口待补充")}</span>}
+        {entry.image_id && <button type="button" className="icon-button" aria-label={`${t("查看二维码")} ${entry.name}`} onClick={() => setImage(image === entry.image_id ? null : entry.image_id)}><QrCode size={19} /></button>}
+      </div>)}
+      {image && <div className="qr-preview"><img src={`/media/${image}`} alt={t("查看二维码")} /></div>}
+    </div>
+  </Modal>;
 }
 function ArrowUpRightTiny() {
   return <span aria-hidden="true">↗</span>;

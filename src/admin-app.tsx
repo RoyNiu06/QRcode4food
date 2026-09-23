@@ -17,6 +17,8 @@ import {
   ShieldCheck,
   Trash2,
   Upload,
+  PanelsTopLeft,
+  UsersRound,
   X,
 } from "lucide-react";
 import type {
@@ -34,6 +36,8 @@ import {
   useLocale,
 } from "./locale";
 import { api, Brand, CategoryIcon, categories, ErrorNotice, Modal } from "./ui";
+import { WindowManager } from "./window-manager";
+import { ContributionReview } from "./contribution-review";
 
 const emptyCatalog: Catalog = {
   place: { name: "", address: "", description: "" },
@@ -47,10 +51,11 @@ export default function AdminApp() {
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
   const [catalog, setCatalog] = useState<Catalog>(emptyCatalog),
-    [tab, setTab] = useState<"restaurants" | "place" | "security">(
+    [tab, setTab] = useState<"restaurants" | "submissions" | "place" | "security">(
       "restaurants",
     );
   const [editing, setEditing] = useState<Restaurant | "new" | null>(null),
+    [managingWindows, setManagingWindows] = useState<Restaurant | null>(null),
     [deleting, setDeleting] = useState<Restaurant | null>(null),
     [busy, setBusy] = useState(false);
   async function reload() {
@@ -173,6 +178,13 @@ export default function AdminApp() {
               <span>{catalog.restaurants.length}</span>
             </button>
             <button
+              className={tab === "submissions" ? "selected" : ""}
+              onClick={() => setTab("submissions")}
+            >
+              <UsersRound size={19} />
+              {t("共创审核")}
+            </button>
+            <button
               className={tab === "place" ? "selected" : ""}
               onClick={() => setTab("place")}
             >
@@ -291,11 +303,22 @@ export default function AdminApp() {
                           {localizedRestaurant(r, "address", locale) ||
                             localizedPlace(catalog.place.name, locale)}
                         </p>
+                        <button className="text-button window-quick-link" onClick={() => setManagingWindows(r)}>
+                          {t("批量上传二维码")} · {r.windows.length} {t(locale === "en" && r.windows.length === 1 ? "个窗口单数" : "个窗口")}
+                        </button>
                       </div>
                       <span className={`status-pill ${r.status}`}>
                         {t(statusLabel[r.status])}
                       </span>
                       <div className="row-actions">
+                        <button
+                          className="icon-button"
+                          aria-label={`${t("管理窗口")} ${localizedRestaurant(r, "name", locale)}`}
+                          title={t("管理窗口")}
+                          onClick={() => setManagingWindows(r)}
+                        >
+                          <PanelsTopLeft size={18} />
+                        </button>
                         <button
                           className="icon-button"
                           aria-label={`${t("编辑")} ${localizedRestaurant(r, "name", locale)}`}
@@ -331,6 +354,7 @@ export default function AdminApp() {
               )}
             </>
           )}
+          {tab === "submissions" && <ContributionReview restaurants={catalog.restaurants} onPublished={reload} />}
           {tab === "place" && (
             <>
               <div className="admin-title-row">
@@ -388,6 +412,7 @@ export default function AdminApp() {
           }}
         />
       )}
+      {managingWindows && <WindowManager restaurant={managingWindows} onClose={() => setManagingWindows(null)} onChanged={reload} />}
       {deleting && (
         <Modal
           title={t("删除这家餐厅？")}

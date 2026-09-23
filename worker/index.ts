@@ -1,9 +1,11 @@
 import {
   InputError,
   textField,
+  validateContribution,
   validateRestaurant,
+  validateWindow,
 } from "../shared/validation";
-import type { Place, Restaurant } from "../shared/types";
+import type { Contribution, Place, Restaurant, RestaurantWindow } from "../shared/types";
 import {
   cookieToken,
   digest,
@@ -150,11 +152,75 @@ async function createSession(request: Request, env: AppEnv, admin: Admin) {
 async function removeUnusedImage(env: AppEnv, id: string | null) {
   if (!id) return;
   const deleted = await env.DB.prepare(
-    "DELETE FROM images WHERE id=? AND NOT EXISTS (SELECT 1 FROM restaurants WHERE image_id=?) RETURNING id",
+    `DELETE FROM images WHERE id=?
+    AND NOT EXISTS (SELECT 1 FROM restaurants WHERE image_id=?)
+    AND NOT EXISTS (SELECT 1 FROM windows WHERE image_id=?)
+    AND NOT EXISTS (SELECT 1 FROM contributions WHERE image_id=?) RETURNING id`,
   )
-    .bind(id, id)
+    .bind(id, id, id, id)
     .first();
   if (deleted) await env.IMAGES.delete(id);
+}
+
+async function getCatalog(env: AppEnv, admin = false) {
+  const [place, restaurants, windows] = await Promise.all([
+    env.DB.prepare("SELECT name,address,description FROM settings WHERE id=1").first<Place>(),
+    env.DB.prepare(admin
+      ? "SELECT * FROM restaurants ORDER BY sort_order,created_at DESC"
+      : "SELECT * FROM restaurants WHERE status='published' ORDER BY sort_order,created_at DESC").all<Restaurant>(),
+    env.DB.prepare("SELECT * FROM windows ORDER BY sort_order,created_at").all<RestaurantWindow>(),
+  ]);
+  const byRestaurant = new Map<string, RestaurantWindow[]>();
+  for (const window of windows.results) {
+    const group = byRestaurant.get(window.restaurant_id) || [];
+    group.push(window);
+    byRestaurant.set(window.restaurant_id, group);
+  }
+  return { place, restaurants: restaurants.results.map((restaurant) => ({
+    ...restaurant, windows: byRestaurant.get(restaurant.id) || [],
+  })) };
+}
+
+const CONTRIBUTION_LIMIT = 10;
+const CONTRIBUTION_WINDOW = 5 * 60 * 60;
+async function contributor(request: Request, env: AppEnv) {
+  const raw = request.headers.get("Cookie")?.split(";").map((part) => part.trim())
+    .find((part) => part.startsWith("qr_contributor="))?.slice(15) || "";
+  const [token, signature] = raw.split(".");
+  if (/^[a-f0-9]{64}$/.test(token || "") && /^[a-f0-9]{64}$/.test(signature || "") &&
+    equal(signature, await digest(token + env.AUTH_SECRET)))
+    return { key: await digest(token + env.AUTH_SECRET), cookie: "" };
+  const fresh = randomToken();
+  const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
+  return {
+    key: await digest(fresh + env.AUTH_SECRET),
+    cookie: `qr_contributor=${fresh}.${await digest(fresh + env.AUTH_SECRET)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000${secure}`,
+  };
+}
+async function quota(env: AppEnv, key: string) {
+  const now = Math.floor(Date.now() / 1000);
+  const row = await env.DB.prepare("SELECT attempts,expires_at FROM contribution_quotas WHERE browser_hash=?")
+    .bind(key).first<{ attempts: number; expires_at: number }>();
+  return {
+    used: row && row.expires_at > now ? row.attempts : 0,
+    limit: CONTRIBUTION_LIMIT,
+    resets_at: row && row.expires_at > now ? row.expires_at : 0,
+  };
+}
+async function consumeQuota(env: AppEnv, key: string) {
+  const now = Math.floor(Date.now() / 1000);
+  const row = await env.DB.prepare(
+    `INSERT INTO contribution_quotas(browser_hash,attempts,started_at,expires_at) VALUES(?,1,?,?)
+    ON CONFLICT(browser_hash) DO UPDATE SET
+      attempts=CASE WHEN expires_at<=? THEN 1 ELSE attempts+1 END,
+      started_at=CASE WHEN expires_at<=? THEN ? ELSE started_at END,
+      expires_at=CASE WHEN expires_at<=? THEN ? ELSE expires_at END
+    WHERE expires_at<=? OR attempts<? RETURNING attempts,expires_at`,
+  ).bind(key, now, now + CONTRIBUTION_WINDOW, now, now, now,
+    now, now + CONTRIBUTION_WINDOW, now, CONTRIBUTION_LIMIT)
+    .first<{ attempts: number; expires_at: number }>();
+  if (!row) throw new HttpError("本浏览器 5 小时内已提交 10 条，请稍后再试", 429);
+  return row;
 }
 
 async function route(
@@ -172,23 +238,17 @@ async function route(
     return json({ ok: true, version: "1.0.0" });
   }
   if (path === "/api/catalog" && method === "GET") {
-    const [place, restaurants] = await Promise.all([
-      env.DB.prepare(
-        "SELECT name,address,description FROM settings WHERE id=1",
-      ).first<Place>(),
-      env.DB.prepare(
-        "SELECT * FROM restaurants WHERE status='published' ORDER BY sort_order, created_at DESC",
-      ).all<Restaurant>(),
-    ]);
-    return json({ place, restaurants: restaurants.results });
+    return json(await getCatalog(env));
   }
   if (path.startsWith("/media/") && (method === "GET" || method === "HEAD")) {
     const id = path.slice(7);
     if (!/^[a-f0-9-]{36}$/.test(id)) throw new HttpError("图片不存在", 404);
     const published = await env.DB.prepare(
-      "SELECT id FROM restaurants WHERE image_id=? AND status='published' LIMIT 1",
+      `SELECT id FROM restaurants WHERE image_id=? AND status='published'
+       UNION SELECT r.id FROM windows w JOIN restaurants r ON r.id=w.restaurant_id
+       WHERE w.image_id=? AND r.status='published' LIMIT 1`,
     )
-      .bind(id)
+      .bind(id, id)
       .first();
     if (!published) await needAdmin(request, env);
     const object = await env.IMAGES.get(id);
@@ -201,6 +261,61 @@ async function route(
         "Content-Security-Policy": "default-src 'none'",
       },
     });
+  }
+  if (path === "/api/contribute/quota" && method === "GET") {
+    const visitor = await contributor(request, env);
+    return json(await quota(env, visitor.key), 200,
+      visitor.cookie ? { "Set-Cookie": visitor.cookie } : {});
+  }
+  if (path === "/api/contributions" && method === "POST") {
+    if (!request.headers.get("Content-Type")?.startsWith("multipart/form-data;"))
+      throw new HttpError("请上传图片和餐厅名称", 415);
+    const bytes = await readBody(request, 5 * 1024 * 1024 + 16000);
+    let form: FormData;
+    try {
+      form = await new Response(new Uint8Array(bytes), {
+        headers: { "Content-Type": request.headers.get("Content-Type")! },
+      }).formData();
+    } catch {
+      throw new InputError("上传内容格式不正确");
+    }
+    const file = form.get("image");
+    if (!(file instanceof File) || file.size > 5 * 1024 * 1024)
+      throw new InputError("请上传不超过 5 MB 的二维码图片");
+    const imageBytes = new Uint8Array(await file.arrayBuffer());
+    const type = imageType(imageBytes);
+    if (!type) throw new InputError("请上传有效的 JPEG 或 PNG 二维码图片");
+    const data = validateContribution({
+      restaurant_id: form.get("restaurant_id"),
+      restaurant_name: form.get("restaurant_name"),
+      window_name: form.get("window_name"),
+      url: form.get("url"),
+    });
+    if (data.restaurant_id && !(await env.DB.prepare(
+      "SELECT id FROM restaurants WHERE id=? AND status='published'",
+    ).bind(data.restaurant_id).first()))
+      throw new InputError("所选餐厅不存在，请重新选择");
+    const visitor = await contributor(request, env);
+    if ((await quota(env, visitor.key)).used >= CONTRIBUTION_LIMIT)
+      throw new HttpError("本浏览器 5 小时内已提交 10 条，请稍后再试", 429);
+    const id = crypto.randomUUID(), imageId = crypto.randomUUID();
+    await env.IMAGES.put(imageId, imageBytes, { httpMetadata: { contentType: type } });
+    try {
+      await consumeQuota(env, visitor.key);
+      await env.DB.batch([
+        env.DB.prepare("INSERT INTO images(id,content_type) VALUES(?,?)").bind(imageId, type),
+        env.DB.prepare(
+          `INSERT INTO contributions(id,browser_hash,restaurant_id,restaurant_name,window_name,url,image_id)
+           VALUES(?,?,?,?,?,?,?)`,
+        ).bind(id, visitor.key, data.restaurant_id, data.restaurant_name,
+          data.window_name, data.url, imageId),
+      ]);
+    } catch (error) {
+      await env.IMAGES.delete(imageId);
+      throw error;
+    }
+    return json({ id, status: "pending", quota: await quota(env, visitor.key) }, 201,
+      visitor.cookie ? { "Set-Cookie": visitor.cookie } : {});
   }
   if (path === "/api/admin/session" && method === "GET") {
     const admin = await session(request, env);
@@ -284,15 +399,7 @@ async function route(
   if (path.startsWith("/api/admin/")) {
     await needAdmin(request, env);
     if (path === "/api/admin/catalog" && method === "GET") {
-      const [place, restaurants] = await Promise.all([
-        env.DB.prepare(
-          "SELECT name,address,description FROM settings WHERE id=1",
-        ).first<Place>(),
-        env.DB.prepare(
-          "SELECT * FROM restaurants ORDER BY sort_order,created_at DESC",
-        ).all<Restaurant>(),
-      ]);
-      return json({ place, restaurants: restaurants.results });
+      return json(await getCatalog(env, true));
     }
     if (path === "/api/admin/place" && method === "PUT") {
       const input = await body(request);
@@ -309,7 +416,7 @@ async function route(
       return json({ ok: true });
     }
     if (path === "/api/admin/images" && method === "POST") {
-      await rateLimit(env, "image-upload", 40);
+      await rateLimit(env, "image-upload", 100);
       const bytes = await readBody(request, 5 * 1024 * 1024),
         type = imageType(bytes);
       if (!type)
@@ -325,6 +432,71 @@ async function route(
         throw error;
       }
       return json({ id }, 201);
+    }
+    if (path === "/api/admin/contributions" && method === "GET") {
+      const [submissions, quotas] = await Promise.all([
+        env.DB.prepare("SELECT * FROM contributions ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END, created_at DESC LIMIT 100")
+          .all<Contribution>(),
+        env.DB.prepare("SELECT browser_hash,attempts,started_at,expires_at FROM contribution_quotas WHERE expires_at>? ORDER BY started_at DESC LIMIT 50")
+          .bind(Math.floor(Date.now() / 1000)).all(),
+      ]);
+      return json({ submissions: submissions.results, quotas: quotas.results,
+        limit: CONTRIBUTION_LIMIT, window_seconds: CONTRIBUTION_WINDOW });
+    }
+    const contributionMatch = path.match(/^\/api\/admin\/contributions\/([a-f0-9-]{36})$/);
+    if (contributionMatch && method === "PUT") {
+      const data = validateContribution(await body(request));
+      if (data.restaurant_id && !(await env.DB.prepare("SELECT id FROM restaurants WHERE id=? AND status='published'")
+        .bind(data.restaurant_id).first()))
+        throw new InputError("所选餐厅未发布或不存在");
+      const result = await env.DB.prepare(
+        `UPDATE contributions SET restaurant_id=?,restaurant_name=?,window_name=?,url=?
+         WHERE id=? AND status='pending' RETURNING id`,
+      ).bind(data.restaurant_id, data.restaurant_name, data.window_name,
+        data.url, contributionMatch[1]).first();
+      if (!result) throw new HttpError("投稿已处理或不存在", 409);
+      return json({ ok: true });
+    }
+    const reviewMatch = path.match(/^\/api\/admin\/contributions\/([a-f0-9-]{36})\/(approve|reject)$/);
+    if (reviewMatch && method === "POST") {
+      const submission = await env.DB.prepare("SELECT * FROM contributions WHERE id=?")
+        .bind(reviewMatch[1]).first<Contribution>();
+      if (!submission || submission.status !== "pending")
+        throw new HttpError("投稿已处理或不存在", 409);
+      if (reviewMatch[2] === "reject") {
+        const changed = await env.DB.prepare(
+          "UPDATE contributions SET status='rejected',reviewed_at=? WHERE id=? AND status='pending' RETURNING id",
+        ).bind(new Date().toISOString(), submission.id).first();
+        if (!changed) throw new HttpError("投稿已被处理", 409);
+        return json({ ok: true });
+      }
+      if (submission.restaurant_id && !(await env.DB.prepare(
+        "SELECT id FROM restaurants WHERE id=? AND status='published'",
+      ).bind(submission.restaurant_id).first()))
+        throw new InputError("目标餐厅未发布或不存在，请修改投稿");
+      const publishedId = crypto.randomUUID();
+      const mark = env.DB.prepare(
+        "UPDATE contributions SET status='approved',reviewed_at=?,published_id=? WHERE id=? AND status='pending'",
+      ).bind(new Date().toISOString(), publishedId, submission.id);
+      const publish = submission.restaurant_id
+        ? env.DB.prepare(
+          `INSERT INTO windows(id,restaurant_id,name,url,image_id)
+           SELECT ?,restaurant_id,CASE WHEN window_name='' THEN restaurant_name ELSE window_name END,url,image_id
+           FROM contributions WHERE id=? AND status='approved' AND published_id=?`,
+        ).bind(publishedId, submission.id, publishedId)
+        : env.DB.prepare(
+          `INSERT INTO restaurants(id,name,url,image_id,status)
+           SELECT ?,restaurant_name,url,image_id,'published'
+           FROM contributions WHERE id=? AND status='approved' AND published_id=?`,
+        ).bind(publishedId, submission.id, publishedId);
+      const result = await env.DB.batch([mark, publish]);
+      if (!result[0].meta.changes) throw new HttpError("投稿已被处理", 409);
+      if (!result[1].meta.changes) {
+        await env.DB.prepare("UPDATE contributions SET status='pending',reviewed_at=NULL,published_id=NULL WHERE id=? AND published_id=?")
+          .bind(submission.id, publishedId).run();
+        throw new HttpError("发布失败，请重试", 409);
+      }
+      return json({ ok: true, published_id: publishedId });
     }
     if (path === "/api/admin/restaurants" && method === "POST") {
       const data = validateRestaurant(await body(request));
@@ -363,6 +535,44 @@ async function route(
         .run();
       return json({ id }, 201);
     }
+    const windowCollection = path.match(/^\/api\/admin\/restaurants\/([a-f0-9-]{36})\/windows$/);
+    if (windowCollection && method === "POST") {
+      if (!(await env.DB.prepare("SELECT id FROM restaurants WHERE id=?")
+        .bind(windowCollection[1]).first()))
+        throw new HttpError("餐厅不存在", 404);
+      const data = validateWindow(await body(request));
+      if (data.image_id && !(await env.DB.prepare("SELECT id FROM images WHERE id=?")
+        .bind(data.image_id).first()))
+        throw new InputError("图片不存在，请重新上传");
+      const id = crypto.randomUUID();
+      await env.DB.prepare(
+        "INSERT INTO windows(id,restaurant_id,name,url,image_id,sort_order) VALUES(?,?,?,?,?,?)",
+      ).bind(id, windowCollection[1], data.name, data.url, data.image_id,
+        data.sort_order).run();
+      return json({ id }, 201);
+    }
+    const windowMatch = path.match(/^\/api\/admin\/windows\/([a-f0-9-]{36})$/);
+    if (windowMatch && (method === "PUT" || method === "DELETE")) {
+      const existing = await env.DB.prepare("SELECT * FROM windows WHERE id=?")
+        .bind(windowMatch[1]).first<RestaurantWindow>();
+      if (!existing) throw new HttpError("窗口不存在", 404);
+      if (method === "DELETE") {
+        await env.DB.prepare("DELETE FROM windows WHERE id=?").bind(existing.id).run();
+        ctx.waitUntil(removeUnusedImage(env, existing.image_id));
+        return json({ ok: true });
+      }
+      const data = validateWindow(await body(request));
+      if (data.image_id && !(await env.DB.prepare("SELECT id FROM images WHERE id=?")
+        .bind(data.image_id).first()))
+        throw new InputError("图片不存在，请重新上传");
+      await env.DB.prepare(
+        "UPDATE windows SET name=?,url=?,image_id=?,sort_order=?,updated_at=? WHERE id=?",
+      ).bind(data.name, data.url, data.image_id, data.sort_order,
+        new Date().toISOString(), existing.id).run();
+      if (existing.image_id !== data.image_id)
+        ctx.waitUntil(removeUnusedImage(env, existing.image_id));
+      return json({ ok: true });
+    }
     const match = path.match(/^\/api\/admin\/restaurants\/([a-f0-9-]{36})$/);
     if (match && (method === "PUT" || method === "DELETE")) {
       const existing = await env.DB.prepare(
@@ -372,10 +582,13 @@ async function route(
         .first<Restaurant>();
       if (!existing) throw new HttpError("餐厅不存在，可能已被删除", 404);
       if (method === "DELETE") {
+        const oldWindows = await env.DB.prepare("SELECT image_id FROM windows WHERE restaurant_id=?")
+          .bind(existing.id).all<{ image_id: string | null }>();
         await env.DB.prepare("DELETE FROM restaurants WHERE id=?")
           .bind(existing.id)
           .run();
-        ctx.waitUntil(removeUnusedImage(env, existing.image_id));
+        ctx.waitUntil(Promise.all([existing.image_id, ...oldWindows.results.map((w) => w.image_id)]
+          .map((id) => removeUnusedImage(env, id))).then(() => {}));
         return json({ ok: true });
       }
       const data = validateRestaurant(await body(request));
@@ -455,9 +668,13 @@ export default {
     await env.DB.batch([
       env.DB.prepare("DELETE FROM sessions WHERE expires<?").bind(now),
       env.DB.prepare("DELETE FROM rate_limits WHERE expires<?").bind(now),
+      env.DB.prepare("DELETE FROM contribution_quotas WHERE expires_at<?").bind(now - 86400),
     ]);
     const stale = await env.DB.prepare(
-      "SELECT id FROM images WHERE created_at < datetime('now','-1 day') AND id NOT IN (SELECT image_id FROM restaurants WHERE image_id IS NOT NULL) LIMIT 100",
+      `SELECT id FROM images WHERE created_at < datetime('now','-1 day')
+       AND id NOT IN (SELECT image_id FROM restaurants WHERE image_id IS NOT NULL)
+       AND id NOT IN (SELECT image_id FROM windows WHERE image_id IS NOT NULL)
+       AND id NOT IN (SELECT image_id FROM contributions) LIMIT 100`,
     ).all<{ id: string }>();
     for (const row of stale.results) await removeUnusedImage(env, row.id);
   },

@@ -4,21 +4,39 @@ import type { Restaurant } from "../shared/types";
 import { localizedRestaurant, useLocale } from "./locale";
 import { categories, Modal } from "./ui";
 
+type Choice = { id: string; restaurant: Restaurant; windowName: string; url: string };
+function choices(restaurants: Restaurant[], mode: "restaurant" | "window"): Choice[] {
+  if (mode === "restaurant") return restaurants.map((restaurant) => ({
+    id: restaurant.id, restaurant, windowName: "", url: restaurant.url,
+  }));
+  return restaurants.flatMap((restaurant) => [
+    ...(restaurant.url ? [{
+      id: `primary:${restaurant.id}`, restaurant, windowName: "主点餐入口", url: restaurant.url,
+    }] : []),
+    ...restaurant.windows.filter((window) => window.url).map((window) => ({
+      id: window.id, restaurant, windowName: window.name, url: window.url,
+    })),
+  ]);
+}
+
 export function Raffle({
   restaurants,
   onClose,
+  onChooseRestaurant,
 }: {
   restaurants: Restaurant[];
   onClose: () => void;
+  onChooseRestaurant: (restaurant: Restaurant) => void;
 }) {
   const { locale, t } = useLocale();
+  const [mode, setMode] = useState<"restaurant" | "window">("restaurant");
   const [category, setCategory] = useState("全部");
   const [selected, setSelected] = useState(
     () => new Set(restaurants.map((item) => item.id)),
   );
   const [spinning, setSpinning] = useState(false);
-  const [rolling, setRolling] = useState<Restaurant | null>(null);
-  const [winner, setWinner] = useState<Restaurant | null>(null);
+  const [rolling, setRolling] = useState<Choice | null>(null);
+  const [winner, setWinner] = useState<Choice | null>(null);
   const interval = useRef<number | undefined>(undefined);
   const timeout = useRef<number | undefined>(undefined);
   useEffect(
@@ -38,12 +56,13 @@ export function Raffle({
     ],
     [restaurants],
   );
+  const candidates = useMemo(() => choices(restaurants, mode), [restaurants, mode]);
   const visible = useMemo(
     () =>
-      restaurants.filter(
-        (item) => category === "全部" || item.category === category,
+      candidates.filter(
+        (item) => category === "全部" || item.restaurant.category === category,
       ),
-    [restaurants, category],
+    [candidates, category],
   );
   const pool = useMemo(
     () => visible.filter((item) => selected.has(item.id)),
@@ -65,6 +84,12 @@ export function Raffle({
     for (const item of visible)
       select ? next.add(item.id) : next.delete(item.id);
     updateSelection(next);
+  }
+  function changeMode(next: "restaurant" | "window") {
+    setMode(next);
+    setSelected(new Set(choices(restaurants, next).map((item) => item.id)));
+    setWinner(null);
+    setRolling(null);
   }
   function draw() {
     if (spinning || pool.length === 0) return;
@@ -108,11 +133,11 @@ export function Raffle({
                     {winner ? t("今天就吃这家") : t("正在寻找好味道")}
                   </span>
                   <strong className={spinning ? "raffle-rolling-name" : ""}>
-                    {localizedRestaurant((winner || rolling)!, "name", locale)}
+                    {localizedRestaurant((winner || rolling)!.restaurant, "name", locale)}
                   </strong>
                   {winner && (
                     <span className="raffle-winner-category">
-                      {t(winner.category)}
+                      {winner.windowName ? `${t(winner.windowName)} · ` : ""}{t(winner.restaurant.category)}
                     </span>
                   )}
                 </>
@@ -126,7 +151,12 @@ export function Raffle({
           </div>
           <div className="raffle-result" aria-live="polite">
             {winner ? (
-              winner.url ? (
+              mode === "restaurant" && winner.restaurant.windows.length ? (
+                <button className="primary-button" onClick={() => {
+                  onClose();
+                  onChooseRestaurant(winner.restaurant);
+                }}>{t("选择点餐窗口")} <ArrowRight size={17} /></button>
+              ) : winner.url ? (
                 <a
                   className="primary-button"
                   href={winner.url}
@@ -157,6 +187,10 @@ export function Raffle({
             </span>
           </div>
           <p>{t("默认包含全部餐厅，也可以按分类筛选或手动勾选。")}</p>
+          <div className="raffle-mode" role="group" aria-label={t("抽签单位")}>
+            <button type="button" className={mode === "restaurant" ? "active" : ""} aria-pressed={mode === "restaurant"} disabled={spinning} onClick={() => changeMode("restaurant")}>{t("按餐厅抽")}</button>
+            <button type="button" className={mode === "window" ? "active" : ""} aria-pressed={mode === "window"} disabled={spinning} onClick={() => changeMode("window")}>{t("按窗口抽")}</button>
+          </div>
           <div className="raffle-categories" aria-label={t("按分类筛选")}>
             {availableCategories.map((value) => (
               <button
@@ -210,9 +244,9 @@ export function Raffle({
                     <Check size={13} />
                   </span>
                   <span className="raffle-choice-name">
-                    {localizedRestaurant(item, "name", locale)}
+                    {localizedRestaurant(item.restaurant, "name", locale)}{item.windowName ? ` · ${t(item.windowName)}` : ""}
                   </span>
-                  <small>{t(item.category)}</small>
+                  <small>{t(item.restaurant.category)}</small>
                 </label>
               ))
             ) : (

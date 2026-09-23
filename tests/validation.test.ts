@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { validateRestaurant, validateUrl } from "../shared/validation";
+import { validateContribution, validateRestaurant, validateUrl, validateWindow } from "../shared/validation";
 import {
   imageType,
   passwordHash,
@@ -76,6 +76,13 @@ test("publish only requires a name; optional metadata and URL may be omitted", (
   assert.throws(() => validateRestaurant({ ...data, name: "" }));
   assert.throws(() => validateRestaurant({ ...data, sort_order: -1 }));
   assert.throws(() => validateRestaurant({ ...data, status: "anything" }));
+});
+test("counter and visitor submissions require names and reject unsafe links", () => {
+  assert.equal(validateWindow({ name: "面食窗口", url: "" }).url, "");
+  assert.equal(validateContribution({ restaurant_name: "食堂", url: "" }).restaurant_id, null);
+  assert.throws(() => validateWindow({ name: "", url: "https://example.com" }));
+  assert.throws(() => validateWindow({ name: "窗口", url: "javascript:alert(1)" }));
+  assert.throws(() => validateContribution({ restaurant_name: "食堂", restaurant_id: "bad" }));
 });
 test("password hashing uses salt and secret pepper, and tokens have enough entropy", async () => {
   const a = await passwordHash("sample-password", "salt1", "pepper1");
