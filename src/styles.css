@@ -2105,6 +2105,40 @@ img {
   font-weight: 700;
 }
 .contribute-upload img { width: 72px; height: 72px; object-fit: contain; border-radius: 8px; background: white; }
+.contribute-upload.compact { min-height:60px; padding:7px 12px; justify-content:flex-start; font-size:12px; }
+.contribute-upload.compact img { width:45px; height:45px; }
+.contribute-section-heading { display:flex; align-items:center; gap:9px; border-top:1px solid var(--line); padding-top:18px; margin-top:2px; }
+.contribute-section-heading > span { display:grid; place-items:center; width:25px; height:25px; border-radius:7px; background:#f8e8de; color:#b74d2d; font:700 11px Georgia,serif; }
+.contribute-section-heading strong { font-size:14px; }
+.contribute-section-heading small { margin-left:auto; color:var(--muted); font-size:11px; }
+.contribute-details { border:1px solid var(--line); border-radius:10px; background:#fcfcf9; }
+.contribute-details summary { cursor:pointer; padding:11px 13px; font-size:12px; font-weight:700; color:#555d50; }
+.contribute-detail-content { display:grid; gap:11px; padding:2px 13px 13px; }
+.contribute-detail-content.field-columns { display:grid; }
+.contribute-entry-fields { display:grid; gap:10px; }
+.contribute-choice { display:flex; align-items:center; gap:8px; font-size:12px; color:#485845; cursor:pointer; }
+.contribute-choice input { accent-color:var(--accent); width:16px; height:16px; margin:0; }
+.contribute-windows { display:grid; gap:11px; }
+.contribute-window { display:grid; gap:9px; padding:13px; border:1px solid var(--line); border-radius:12px; background:#fcfcf9; }
+.contribute-window-head { display:flex; align-items:center; justify-content:space-between; }
+.contribute-window-head strong { font-size:13px; }
+.contribute-add-window { min-height:39px; font-size:12px; }
+.order-notes-fields { display:grid; gap:12px; }
+.order-notes-choices { display:flex; flex-wrap:wrap; gap:8px; }
+.order-notes-choices label { display:flex; align-items:center; gap:7px; padding:9px 11px; border:1px solid var(--line); border-radius:9px; background:#f7f8f3; color:#455341; font-size:12px; cursor:pointer; }
+.order-notes-choices input { accent-color:var(--accent); width:16px; height:16px; margin:0; }
+.order-notes-fields .field-columns { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; }
+.editor-order-notes { display:grid; gap:11px; padding:15px; border:1px solid var(--line); border-radius:12px; background:#fcfcf9; margin:4px 0 16px; }
+.editor-order-notes h3 { font-size:14px; }
+.review-image.empty { color:var(--muted); font-size:12px; min-height:90px; text-align:center; }
+.review-windows { display:grid; gap:10px; margin-top:15px; }
+.review-windows h3 { font-size:14px; }
+.review-window { display:grid; grid-template-columns:72px minmax(0,1fr); gap:12px; padding:10px; border:1px solid var(--line); border-radius:10px; background:#fcfcf9; }
+.review-window img,.review-window-empty { width:72px; height:72px; object-fit:contain; border:1px solid var(--line); border-radius:7px; background:white; }
+.review-window-empty { display:grid; place-items:center; color:var(--muted); font-size:11px; }
+.review-window-fields { display:grid; gap:7px; min-width:0; }
+.review-window-fields .field { margin:0; }
+.review-window-fields input { min-width:0; width:100%; }
 .contribute-success { text-align: center; padding: 26px 10px; }
 .contribute-success > span { display: inline-grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: #eaf3e2; color: #638749; }
 .contribute-success h3 { margin: 15px 0 8px; font-size: 20px; }
@@ -2780,7 +2814,13 @@ img {
   box-shadow:
     0 18px 45px #a7482836,
     inset 0 0 0 1px #ffffff96;
+  border:0;
+  cursor:pointer;
+  transition:transform .18s ease, box-shadow .18s ease;
 }
+.raffle-orbit:not(:disabled):hover { transform:scale(1.025); box-shadow:0 22px 48px #a7482848; }
+.raffle-orbit:focus-visible { outline:3px solid #a83d1c; outline-offset:7px; }
+.raffle-orbit:disabled { cursor:wait; }
 .raffle-orbit::before {
   content: "";
   position: absolute;
@@ -2826,6 +2866,7 @@ img {
   font-size: 11px;
   letter-spacing: 1px;
 }
+.raffle-orbit-inner small { color:#a3664f; font-size:11px; line-height:1.3; }
 .raffle-rolling-name {
   filter: blur(0.4px);
 }
@@ -3147,8 +3188,15 @@ img {
 .list-view .category-label,.list-view .card-number { display:none; }
 .list-view .favorite-button { position:absolute; top:5px; right:5px; }
 .list-view .restaurant-card h3 { grid-column:2; grid-row:1; font-size:16px; line-height:1.25; padding-right:20px; }
+.list-view .restaurant-card h3 { padding-left:0; text-align:left; justify-self:start; }
 .list-view .restaurant-address { grid-column:2; grid-row:2; margin:2px 0 0; font-size:11px; }
+.list-view .restaurant-address { margin-left:0; text-align:left; justify-self:start; }
 .list-view .restaurant-description { display:none; }
+.restaurant-order-notes { display:flex; flex-wrap:wrap; align-items:center; gap:5px; margin:0 0 10px; }
+.restaurant-order-notes span { display:inline-flex; max-width:100%; padding:3px 7px; border-radius:6px; background:#edf2e9; color:#527048; font-size:11px; line-height:1.45; overflow-wrap:anywhere; }
+.restaurant-order-notes .other-note { background:#f5f1e9; color:#7c6041; }
+.list-view .restaurant-order-notes { grid-column:2; grid-row:3; margin:3px 0 0; }
+.list-view .restaurant-card.has-order-notes .card-actions { grid-row:1 / 4; }
 .list-view .card-actions { grid-column:3; grid-row:1 / 3; border:0; padding:0 27px 0 0; align-items:center; min-width:0; }
 .list-view .order-button { min-height:38px; padding:8px 11px; font-size:12px; white-space:nowrap; }
 .list-view .qr-button { min-width:38px; height:38px; }
@@ -3178,18 +3226,33 @@ img {
 .rank-change.up { color:#23804b; }.rank-change.down { color:#c0443c; }.rank-change.same { color:#9a9d97; }.rank-change.new { color:#3379bc; }
 .ranking-legend { display:flex; align-items:center; gap:6px; margin:16px 0 0; color:#8a9087; font-size:11px; line-height:1.5; }
 .ranking-message { padding:24px 0; text-align:center; color:#899083; font-size:13px; }
+.intro-raffle { display:inline-flex; align-items:center; justify-content:center; gap:7px; flex-shrink:0; min-height:38px; margin-top:3px; padding:8px 12px; border:1px solid #ead4c7; border-radius:999px; background:#fffaf6; color:#a74e2e; font-size:12px; font-weight:700; white-space:nowrap; cursor:pointer; transition:background .18s,border-color .18s,transform .18s; }
+.intro-raffle:hover { background:#fff0e5; border-color:#d9a78e; transform:translateY(-1px); }
+.intro-raffle svg { flex-shrink:0; }
+.raffle-easter-line { padding:14px 5px 24px; color:#613c2a; font:600 clamp(20px,4vw,27px)/1.6 Georgia,"PingFang SC",serif; text-align:center; }
+.raffle-settings-form { display:grid; gap:13px; max-width:760px; }
+.raffle-settings-form .field { margin:0; }
+.raffle-settings-form .field-hint { margin:0; }
+.raffle-settings-form .primary-button { justify-self:start; }
 @media(max-width:700px) {
+  .intro-section { display:flex; flex-direction:row; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .intro-copy { min-width:0; }
+  .intro-raffle { min-height:34px; margin-top:1px; padding:7px 9px; gap:5px; font-size:11px; }
+  .intro-raffle svg { width:14px; height:14px; }
+  .intro-copy h1 { font-size:28px; line-height:1.25; }
   .home-actions { margin-top:10px; }
   .home-actions .raffle-entry,.home-actions .contribute-entry,.ranking-entry { min-height:35px; padding:6px 9px; font-size:11px; }
   .filter-row { gap:5px; margin:5px 0 11px; padding:5px 0; }
   .filter-row .filter-chip { min-height:32px; padding:6px 10px; font-size:11px; }
   .view-tool span { display:none; }
   .view-tool { width:33px; padding:0; }
-  .list-view .restaurant-card { grid-template-columns:38px minmax(0,1fr); column-gap:9px; row-gap:2px; min-height:84px; padding:11px; }
-  .list-view .card-top .category-tile { width:34px; height:34px; }
-  .list-view .card-top .category-tile svg { width:20px; }
-  .list-view .restaurant-card h3 { font-size:14px; }
-  .list-view .card-actions { grid-column:2; grid-row:3; padding:4px 23px 0 0; }
+  .list-view .restaurant-card { grid-template-columns:minmax(0,1fr); row-gap:2px; min-height:78px; padding:11px; }
+  .list-view .card-top { display:none; }
+  .list-view .restaurant-card h3 { grid-column:1; font-size:14px; padding-left:0; text-align:left; padding-right:29px; }
+  .list-view .restaurant-address { grid-column:1; margin-left:0; }
+  .list-view .card-actions { grid-column:1; grid-row:3; padding:4px 23px 0 0; }
+  .list-view .restaurant-card.has-order-notes .card-actions { grid-row:4; }
+  .list-view .restaurant-order-notes { grid-column:1; margin:1px 0 0; }
   .list-view .order-button { min-height:31px; padding:5px 9px; }
   .list-view .qr-button { height:31px; min-width:31px; }
   .ranking-item { grid-template-columns:25px minmax(0,1fr) auto 37px; gap:5px; padding:9px; }

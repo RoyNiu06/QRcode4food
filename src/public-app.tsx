@@ -159,6 +159,10 @@ export function PublicApp() {
             </h1>
             <p>{t("是啊，吃什么？")}</p>
           </div>
+          <button type="button" className="intro-raffle" onClick={()=>setRaffleOpen(true)} aria-label={t("今天吃什么")}>
+            <Dices size={16} aria-hidden="true"/>
+            <span>{t("今天吃什么")}</span>
+          </button>
         </section>
         <section
           id="restaurants"
@@ -192,7 +196,6 @@ export function PublicApp() {
             </div>
           </div>
           <div className="home-actions">
-            <button type="button" className="raffle-entry" onClick={() => setRaffleOpen(true)}><Dices size={17}/><span>{t("今天吃什么")}</span><ArrowRight size={15}/></button>
             <button type="button" className="contribute-entry" onClick={() => setContributeOpen(true)}><UsersRound size={16}/>{t("一起补充")}</button>
             <button type="button" className="ranking-entry" onClick={() => setRankingsOpen(true)}><Trophy size={16}/>{t("跳转排行")}</button>
           </div>
@@ -244,7 +247,7 @@ export function PublicApp() {
           ) : filtered.length ? (
             <div className={`restaurant-grid ${view === "list" ? "list-view" : ""}`}>
               {filtered.map((r, i) => (
-                <article className="restaurant-card" key={r.id}>
+                <article className={`restaurant-card ${r.opens_app || r.wechat_mini_program || r.other_note ? "has-order-notes" : ""}`} key={r.id}>
                   <div className="card-top">
                     <span
                       className={`category-tile tone-${(r.category.charCodeAt(0) || 0) % 4}`}
@@ -255,8 +258,8 @@ export function PublicApp() {
                     <span className="card-number">
                       {String(i + 1).padStart(2, "0")}
                     </span>
-                    <button className={`favorite-button ${favorites.includes(r.id)?"is-favorite":""}`} onClick={()=>toggleFavorite(r.id)} aria-label={`${favorites.includes(r.id)?t("取消收藏"):t("收藏")}：${localizedRestaurant(r,"name",locale)}`} aria-pressed={favorites.includes(r.id)} title={favorites.includes(r.id)?t("取消收藏"):t("收藏")}><Heart size={19} fill={favorites.includes(r.id)?"currentColor":"none"}/></button>
                   </div>
+                  <button className={`favorite-button ${favorites.includes(r.id)?"is-favorite":""}`} onClick={()=>toggleFavorite(r.id)} aria-label={`${favorites.includes(r.id)?t("取消收藏"):t("收藏")}：${localizedRestaurant(r,"name",locale)}`} aria-pressed={favorites.includes(r.id)} title={favorites.includes(r.id)?t("取消收藏"):t("收藏")}><Heart size={19} fill={favorites.includes(r.id)?"currentColor":"none"}/></button>
                   <h3>{localizedRestaurant(r, "name", locale)}</h3>
                   <p className="restaurant-address">
                     {(r.address || data?.place.name) && <MapPin size={14} />}
@@ -269,6 +272,11 @@ export function PublicApp() {
                     {localizedRestaurant(r, "description", locale) ||
                       t("把喜欢的味道，安排进今天。")}
                   </p>
+                  {(r.opens_app || r.wechat_mini_program || r.other_note) && <div className="restaurant-order-notes" aria-label={t("点餐方式备注")}>
+                    {Boolean(r.opens_app)&&<span>{t("点击跳转 App")}</span>}
+                    {Boolean(r.wechat_mini_program)&&<span>{t("可用微信小程序")}</span>}
+                    {Boolean(r.other_note)&&<span className="other-note">{localizedRestaurant(r,"other_note",locale)}</span>}
+                  </div>}
                   <div className="card-actions">
                     {r.windows.length ? (
                       <button className="order-button" onClick={() => setMenuRestaurant(r)}>
@@ -346,6 +354,7 @@ export function PublicApp() {
       {raffleOpen && (
         <Raffle
           restaurants={data?.restaurants || []}
+          settings={data?.raffle}
           onClose={() => setRaffleOpen(false)}
           onChooseRestaurant={setMenuRestaurant}
         />

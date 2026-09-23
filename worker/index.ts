@@ -2,6 +2,8 @@ import {
   InputError,
   textField,
   validateContribution,
+  validateContributionWindows,
+  validateRaffleSettings,
   validateRestaurant,
   validateWindow,
 } from "../shared/validation";
@@ -155,20 +157,23 @@ async function removeUnusedImage(env: AppEnv, id: string | null) {
     `DELETE FROM images WHERE id=?
     AND NOT EXISTS (SELECT 1 FROM restaurants WHERE image_id=?)
     AND NOT EXISTS (SELECT 1 FROM windows WHERE image_id=?)
-    AND NOT EXISTS (SELECT 1 FROM contributions WHERE image_id=?) RETURNING id`,
+    AND NOT EXISTS (SELECT 1 FROM contributions WHERE image_id=?)
+    AND NOT EXISTS (SELECT 1 FROM contribution_windows WHERE image_id=?) RETURNING id`,
   )
-    .bind(id, id, id, id)
+    .bind(id, id, id, id, id)
     .first();
   if (deleted) await env.IMAGES.delete(id);
 }
 
 async function getCatalog(env: AppEnv, admin = false) {
-  const [place, restaurants, windows] = await Promise.all([
+  const [place, restaurants, windows, raffleRow] = await Promise.all([
     env.DB.prepare("SELECT name,address,description FROM settings WHERE id=1").first<Place>(),
     env.DB.prepare(admin
       ? "SELECT * FROM restaurants ORDER BY sort_order,created_at DESC"
       : "SELECT * FROM restaurants WHERE status='published' ORDER BY sort_order,created_at DESC").all<Restaurant>(),
     env.DB.prepare("SELECT * FROM windows ORDER BY sort_order,created_at").all<RestaurantWindow>(),
+    env.DB.prepare("SELECT enabled,lines_zh_hans,lines_zh_hant,lines_en FROM raffle_settings WHERE id=1")
+      .first<{enabled:number;lines_zh_hans:string;lines_zh_hant:string;lines_en:string}>(),
   ]);
   const byRestaurant = new Map<string, RestaurantWindow[]>();
   for (const window of windows.results) {
@@ -176,7 +181,13 @@ async function getCatalog(env: AppEnv, admin = false) {
     group.push(window);
     byRestaurant.set(window.restaurant_id, group);
   }
-  return { place, restaurants: restaurants.results.map((restaurant) => ({
+  const parseLines = (raw:string|undefined):string[] => {
+    try {const value=JSON.parse(raw||"[]");return Array.isArray(value)?value.filter(item=>typeof item==="string"):[];}
+    catch{return [];}
+  };
+  return { place, raffle: {enabled:Boolean(raffleRow?.enabled),
+    lines_zh_hans:parseLines(raffleRow?.lines_zh_hans),lines_zh_hant:parseLines(raffleRow?.lines_zh_hant),
+    lines_en:parseLines(raffleRow?.lines_en)}, restaurants: restaurants.results.map((restaurant) => ({
     ...restaurant, windows: byRestaurant.get(restaurant.id) || [],
   })) };
 }
@@ -310,8 +321,8 @@ async function route(
   }
   if (path === "/api/contributions" && method === "POST") {
     if (!request.headers.get("Content-Type")?.startsWith("multipart/form-data;"))
-      throw new HttpError("请上传图片和餐厅名称", 415);
-    const bytes = await readBody(request, 5 * 1024 * 1024 + 16000);
+      throw new HttpError("请使用表单提交", 415);
+    const bytes = await readBody(request, 20 * 1024 * 1024);
     let form: FormData;
     try {
       form = await new Response(new Uint8Array(bytes), {
@@ -320,18 +331,35 @@ async function route(
     } catch {
       throw new InputError("上传内容格式不正确");
     }
-    const file = form.get("image");
-    if (!(file instanceof File) || file.size > 5 * 1024 * 1024)
-      throw new InputError("请上传不超过 5 MB 的二维码图片");
-    const imageBytes = new Uint8Array(await file.arrayBuffer());
-    const type = imageType(imageBytes);
-    if (!type) throw new InputError("请上传有效的 JPEG 或 PNG 二维码图片");
-    const data = validateContribution({
-      restaurant_id: form.get("restaurant_id"),
-      restaurant_name: form.get("restaurant_name"),
-      window_name: form.get("window_name"),
-      url: form.get("url"),
-    });
+    const details = form.get("details");
+    let fields: Record<string, unknown>;
+    if (typeof details === "string") {
+      if (details.length > 16000) throw new InputError("投稿内容过长");
+      try { fields = JSON.parse(details); } catch { throw new InputError("投稿内容格式不正确"); }
+      if (!fields || typeof fields !== "object" || Array.isArray(fields)) throw new InputError("投稿内容格式不正确");
+    } else {
+      fields = { restaurant_id: form.get("restaurant_id"), restaurant_name: form.get("restaurant_name"),
+        window_name: form.get("window_name"), url: form.get("url") };
+    }
+    const data = validateContribution(fields);
+    const windowData = data.mode === "legacy" ? [] : validateContributionWindows(fields.windows || []);
+    async function uploadedImage(key: string) {
+      const file = form.get(key);
+      if (file == null) return null;
+      if (!(file instanceof File) || file.size === 0 || file.size > 5 * 1024 * 1024)
+        throw new InputError("请上传不超过 5 MB 的二维码图片");
+      const imageBytes = new Uint8Array(await file.arrayBuffer());
+      const type = imageType(imageBytes);
+      if (!type) throw new InputError("请上传有效的 JPEG 或 PNG 二维码图片");
+      return { id: crypto.randomUUID(), bytes: imageBytes, type };
+    }
+    if (!data.include_main && (form.has("main_image") || form.has("image")))
+      throw new InputError("未选择主入口时请勿上传主二维码");
+    const mainImage = await uploadedImage(data.mode === "legacy" ? "image" : "main_image");
+    if (data.mode === "legacy" && !mainImage) throw new InputError("请上传二维码图片");
+    const windowImages: Awaited<ReturnType<typeof uploadedImage>>[] = [];
+    for (let index = 0; index < windowData.length; index++)
+      windowImages.push(await uploadedImage(`window_image_${index}`));
     if (data.restaurant_id && !(await env.DB.prepare(
       "SELECT id FROM restaurants WHERE id=? AND status='published'",
     ).bind(data.restaurant_id).first()))
@@ -339,20 +367,33 @@ async function route(
     const visitor = await contributor(request, env);
     if ((await quota(env, visitor.key)).used >= CONTRIBUTION_LIMIT)
       throw new HttpError("本浏览器 5 小时内已提交 10 条，请稍后再试", 429);
-    const id = crypto.randomUUID(), imageId = crypto.randomUUID();
-    await env.IMAGES.put(imageId, imageBytes, { httpMetadata: { contentType: type } });
+    const id = crypto.randomUUID();
+    const images = [mainImage, ...windowImages].filter((item): item is NonNullable<typeof item> => item !== null);
+    const stored: string[] = [];
     try {
+      for (const image of images) {
+        await env.IMAGES.put(image.id, image.bytes, { httpMetadata: { contentType: image.type } });
+        stored.push(image.id);
+      }
       await consumeQuota(env, visitor.key);
       await env.DB.batch([
-        env.DB.prepare("INSERT INTO images(id,content_type) VALUES(?,?)").bind(imageId, type),
+        ...images.map(image => env.DB.prepare("INSERT INTO images(id,content_type) VALUES(?,?)").bind(image.id,image.type)),
         env.DB.prepare(
-          `INSERT INTO contributions(id,browser_hash,restaurant_id,restaurant_name,window_name,url,image_id)
-           VALUES(?,?,?,?,?,?,?)`,
+          `INSERT INTO contributions(id,browser_hash,restaurant_id,restaurant_name,window_name,url,image_id,mode,include_main,
+           name_zh_hant,name_en,address,address_zh_hant,address_en,category,description,description_zh_hant,description_en,
+           opens_app,wechat_mini_program,other_note,other_note_zh_hant,other_note_en)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         ).bind(id, visitor.key, data.restaurant_id, data.restaurant_name,
-          data.window_name, data.url, imageId),
+          data.window_name, data.url, mainImage?.id || null, data.mode, data.include_main ? 1 : 0,
+          data.name_zh_hant, data.name_en, data.address, data.address_zh_hant, data.address_en,
+          data.category, data.description, data.description_zh_hant, data.description_en,
+          data.opens_app,data.wechat_mini_program,data.other_note,data.other_note_zh_hant,data.other_note_en),
+        ...windowData.map((window,index) => env.DB.prepare(
+          "INSERT INTO contribution_windows(id,contribution_id,name,url,image_id,sort_order) VALUES(?,?,?,?,?,?)",
+        ).bind(crypto.randomUUID(),id,window.name,window.url,windowImages[index]?.id || null,index)),
       ]);
     } catch (error) {
-      await env.IMAGES.delete(imageId);
+      await Promise.all(stored.map(imageId => env.IMAGES.delete(imageId)));
       throw error;
     }
     return json({ id, status: "pending", quota: await quota(env, visitor.key) }, 201,
@@ -456,6 +497,12 @@ async function route(
         .run();
       return json({ ok: true });
     }
+    if (path === "/api/admin/raffle-settings" && method === "PUT") {
+      const data=validateRaffleSettings(await body(request));
+      await env.DB.prepare(`UPDATE raffle_settings SET enabled=?,lines_zh_hans=?,lines_zh_hant=?,lines_en=? WHERE id=1`)
+        .bind(data.enabled?1:0,JSON.stringify(data.lines_zh_hans),JSON.stringify(data.lines_zh_hant),JSON.stringify(data.lines_en)).run();
+      return json({ok:true});
+    }
     if (path === "/api/admin/images" && method === "POST") {
       await rateLimit(env, "image-upload", 100);
       const bytes = await readBody(request, 5 * 1024 * 1024),
@@ -475,27 +522,47 @@ async function route(
       return json({ id }, 201);
     }
     if (path === "/api/admin/contributions" && method === "GET") {
-      const [submissions, quotas] = await Promise.all([
+      const [submissions, quotas, windows] = await Promise.all([
         env.DB.prepare("SELECT * FROM contributions ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END, created_at DESC LIMIT 100")
           .all<Contribution>(),
         env.DB.prepare("SELECT browser_hash,attempts,started_at,expires_at FROM contribution_quotas WHERE expires_at>? ORDER BY started_at DESC LIMIT 50")
           .bind(Math.floor(Date.now() / 1000)).all(),
+        env.DB.prepare("SELECT * FROM contribution_windows ORDER BY sort_order").all(),
       ]);
-      return json({ submissions: submissions.results, quotas: quotas.results,
+      return json({ submissions: submissions.results.map(item => ({...item,
+        windows: windows.results.filter(window => window.contribution_id === item.id)})), quotas: quotas.results,
         limit: CONTRIBUTION_LIMIT, window_seconds: CONTRIBUTION_WINDOW });
     }
     const contributionMatch = path.match(/^\/api\/admin\/contributions\/([a-f0-9-]{36})$/);
     if (contributionMatch && method === "PUT") {
-      const data = validateContribution(await body(request));
+      const existing = await env.DB.prepare("SELECT * FROM contributions WHERE id=? AND status='pending'")
+        .bind(contributionMatch[1]).first<Contribution>();
+      if (!existing) throw new HttpError("投稿已处理或不存在", 409);
+      const input = await body(request);
+      const data = validateContribution({...input,mode:existing.mode,
+        include_main: existing.mode === "legacy" ? true : input.include_main});
       if (data.restaurant_id && !(await env.DB.prepare("SELECT id FROM restaurants WHERE id=? AND status='published'")
         .bind(data.restaurant_id).first()))
         throw new InputError("所选餐厅未发布或不存在");
-      const result = await env.DB.prepare(
-        `UPDATE contributions SET restaurant_id=?,restaurant_name=?,window_name=?,url=?
-         WHERE id=? AND status='pending' RETURNING id`,
-      ).bind(data.restaurant_id, data.restaurant_name, data.window_name,
-        data.url, contributionMatch[1]).first();
-      if (!result) throw new HttpError("投稿已处理或不存在", 409);
+      const existingWindows = await env.DB.prepare("SELECT id FROM contribution_windows WHERE contribution_id=? ORDER BY sort_order")
+        .bind(existing.id).all<{id:string}>();
+      const windowData = existing.mode === "legacy" ? [] : validateContributionWindows(input.windows || []);
+      if (windowData.length !== existingWindows.results.length ||
+        windowData.some((window,index) => window.id !== existingWindows.results[index].id))
+        throw new InputError("窗口列表已变化，请刷新后重试");
+      const result = await env.DB.batch([
+        env.DB.prepare(`UPDATE contributions SET restaurant_id=?,restaurant_name=?,window_name=?,url=?,include_main=?,
+          name_zh_hant=?,name_en=?,address=?,address_zh_hant=?,address_en=?,category=?,description=?,description_zh_hant=?,description_en=?,
+          opens_app=?,wechat_mini_program=?,other_note=?,other_note_zh_hant=?,other_note_en=?
+          WHERE id=? AND status='pending'`).bind(data.restaurant_id,data.restaurant_name,data.window_name,data.url,data.include_main ? 1 : 0,
+            data.name_zh_hant,data.name_en,data.address,data.address_zh_hant,data.address_en,data.category,
+            data.description,data.description_zh_hant,data.description_en,data.opens_app,data.wechat_mini_program,
+            data.other_note,data.other_note_zh_hant,data.other_note_en,existing.id),
+        ...windowData.map(window => env.DB.prepare(`UPDATE contribution_windows SET name=?,url=?,included=?
+          WHERE id=? AND contribution_id=? AND EXISTS(SELECT 1 FROM contributions WHERE id=? AND status='pending')`)
+          .bind(window.name,window.url,window.included ? 1 : 0,window.id,existing.id,existing.id)),
+      ]);
+      if (!result[0].meta.changes) throw new HttpError("投稿已处理或不存在", 409);
       return json({ ok: true });
     }
     const reviewMatch = path.match(/^\/api\/admin\/contributions\/([a-f0-9-]{36})\/(approve|reject)$/);
@@ -515,22 +582,49 @@ async function route(
         "SELECT id FROM restaurants WHERE id=? AND status='published'",
       ).bind(submission.restaurant_id).first()))
         throw new InputError("目标餐厅未发布或不存在，请修改投稿");
+      if (submission.mode === "update" && !submission.restaurant_id)
+        throw new InputError("目标餐厅已删除，请拒绝此投稿");
       const publishedId = crypto.randomUUID();
       const mark = env.DB.prepare(
         "UPDATE contributions SET status='approved',reviewed_at=?,published_id=? WHERE id=? AND status='pending'",
       ).bind(new Date().toISOString(), publishedId, submission.id);
-      const publish = submission.restaurant_id
+      const publish = submission.mode === "update" && submission.restaurant_id
+        ? env.DB.prepare(`UPDATE restaurants SET name=?,name_zh_hant=?,name_en=?,address=?,address_zh_hant=?,address_en=?,
+            category=?,description=?,description_zh_hant=?,description_en=?,opens_app=?,wechat_mini_program=?,
+            other_note=?,other_note_zh_hant=?,other_note_en=?,
+            url=CASE WHEN ?=1 THEN ? ELSE url END,
+            image_id=CASE WHEN ?=1 THEN ? ELSE image_id END,updated_at=?
+            WHERE id=? AND status='published' AND EXISTS(SELECT 1 FROM contributions WHERE id=? AND status='approved' AND published_id=?)`)
+          .bind(submission.restaurant_name,submission.name_zh_hant,submission.name_en,
+            submission.address,submission.address_zh_hant,submission.address_en,submission.category,
+            submission.description,submission.description_zh_hant,submission.description_en,
+            submission.opens_app,submission.wechat_mini_program,submission.other_note,
+            submission.other_note_zh_hant,submission.other_note_en,
+            submission.include_main,submission.url,submission.include_main,submission.image_id,
+            new Date().toISOString(),submission.restaurant_id,submission.id,publishedId)
+        : submission.restaurant_id
         ? env.DB.prepare(
           `INSERT INTO windows(id,restaurant_id,name,url,image_id)
            SELECT ?,restaurant_id,CASE WHEN window_name='' THEN restaurant_name ELSE window_name END,url,image_id
            FROM contributions WHERE id=? AND status='approved' AND published_id=?`,
         ).bind(publishedId, submission.id, publishedId)
         : env.DB.prepare(
-          `INSERT INTO restaurants(id,name,url,image_id,status)
-           SELECT ?,restaurant_name,url,image_id,'published'
+          `INSERT INTO restaurants(id,name,name_zh_hant,name_en,address,address_zh_hant,address_en,category,
+            description,description_zh_hant,description_en,opens_app,wechat_mini_program,other_note,other_note_zh_hant,other_note_en,url,image_id,status)
+           SELECT ?,restaurant_name,name_zh_hant,name_en,address,address_zh_hant,address_en,category,
+            description,description_zh_hant,description_en,opens_app,wechat_mini_program,other_note,other_note_zh_hant,other_note_en,
+            CASE WHEN include_main=1 THEN url ELSE '' END,
+            CASE WHEN include_main=1 THEN image_id ELSE NULL END,'published'
            FROM contributions WHERE id=? AND status='approved' AND published_id=?`,
         ).bind(publishedId, submission.id, publishedId);
-      const result = await env.DB.batch([mark, publish]);
+      const statements = [mark,publish];
+      if (submission.mode !== "legacy") statements.push(env.DB.prepare(
+        `INSERT INTO windows(id,restaurant_id,name,url,image_id,sort_order)
+         SELECT cw.id,?,cw.name,cw.url,cw.image_id,cw.sort_order FROM contribution_windows cw
+         JOIN contributions c ON c.id=cw.contribution_id
+         WHERE c.id=? AND c.status='approved' AND c.published_id=? AND cw.included=1`,
+      ).bind(submission.restaurant_id || publishedId,submission.id,publishedId));
+      const result = await env.DB.batch(statements);
       if (!result[0].meta.changes) throw new HttpError("投稿已被处理", 409);
       if (!result[1].meta.changes) {
         await env.DB.prepare("UPDATE contributions SET status='pending',reviewed_at=NULL,published_id=NULL WHERE id=? AND published_id=?")
@@ -551,7 +645,9 @@ async function route(
       const id = crypto.randomUUID(),
         now = new Date().toISOString();
       await env.DB.prepare(
-        "INSERT INTO restaurants(id,name,name_zh_hant,name_en,address,address_zh_hant,address_en,category,description,description_zh_hant,description_en,url,image_id,status,sort_order,verified_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        `INSERT INTO restaurants(id,name,name_zh_hant,name_en,address,address_zh_hant,address_en,category,
+          description,description_zh_hant,description_en,opens_app,wechat_mini_program,other_note,other_note_zh_hant,other_note_en,
+          url,image_id,status,sort_order,verified_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
         .bind(
           id,
@@ -565,6 +661,11 @@ async function route(
           data.description,
           data.description_zh_hant,
           data.description_en,
+          data.opens_app,
+          data.wechat_mini_program,
+          data.other_note,
+          data.other_note_zh_hant,
+          data.other_note_en,
           data.url,
           data.image_id,
           data.status,
@@ -642,7 +743,9 @@ async function route(
         throw new InputError("图片不存在，请重新上传");
       const now = new Date().toISOString();
       await env.DB.prepare(
-        "UPDATE restaurants SET name=?,name_zh_hant=?,name_en=?,address=?,address_zh_hant=?,address_en=?,category=?,description=?,description_zh_hant=?,description_en=?,url=?,image_id=?,status=?,sort_order=?,verified_at=?,updated_at=? WHERE id=?",
+        `UPDATE restaurants SET name=?,name_zh_hant=?,name_en=?,address=?,address_zh_hant=?,address_en=?,category=?,
+          description=?,description_zh_hant=?,description_en=?,opens_app=?,wechat_mini_program=?,other_note=?,other_note_zh_hant=?,other_note_en=?,
+          url=?,image_id=?,status=?,sort_order=?,verified_at=?,updated_at=? WHERE id=?`,
       )
         .bind(
           data.name,
@@ -655,6 +758,11 @@ async function route(
           data.description,
           data.description_zh_hant,
           data.description_en,
+          data.opens_app,
+          data.wechat_mini_program,
+          data.other_note,
+          data.other_note_zh_hant,
+          data.other_note_en,
           data.url,
           data.image_id,
           data.status,
@@ -716,7 +824,8 @@ export default {
       `SELECT id FROM images WHERE created_at < datetime('now','-1 day')
        AND id NOT IN (SELECT image_id FROM restaurants WHERE image_id IS NOT NULL)
        AND id NOT IN (SELECT image_id FROM windows WHERE image_id IS NOT NULL)
-       AND id NOT IN (SELECT image_id FROM contributions) LIMIT 100`,
+       AND id NOT IN (SELECT image_id FROM contributions WHERE image_id IS NOT NULL)
+       AND id NOT IN (SELECT image_id FROM contribution_windows WHERE image_id IS NOT NULL) LIMIT 100`,
     ).all<{ id: string }>();
     for (const row of stale.results) await removeUnusedImage(env, row.id);
   },

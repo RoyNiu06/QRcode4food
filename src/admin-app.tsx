@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Check,
   CircleCheck,
+  Dices,
   ExternalLink,
   ImagePlus,
   LayoutGrid,
@@ -27,6 +28,7 @@ import type {
   Place,
   Restaurant,
   RestaurantStatus,
+  RaffleSettings,
 } from "../shared/types";
 import { validateUrl } from "../shared/validation";
 import {
@@ -38,10 +40,12 @@ import {
 import { api, Brand, CategoryIcon, categories, ErrorNotice, Modal } from "./ui";
 import { WindowManager } from "./window-manager";
 import { ContributionReview } from "./contribution-review";
+import { OrderNotesFields } from "./order-notes-fields";
 
 const emptyCatalog: Catalog = {
   place: { name: "", address: "", description: "" },
   restaurants: [],
+  raffle: {enabled:true,lines_zh_hans:[],lines_zh_hant:[],lines_en:[]},
 };
 const statusLabel = { published: "已发布", draft: "草稿", disabled: "已停用" };
 
@@ -51,7 +55,7 @@ export default function AdminApp() {
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
   const [catalog, setCatalog] = useState<Catalog>(emptyCatalog),
-    [tab, setTab] = useState<"restaurants" | "submissions" | "place" | "security">(
+    [tab, setTab] = useState<"restaurants" | "submissions" | "place" | "raffle" | "security">(
       "restaurants",
     );
   const [editing, setEditing] = useState<Restaurant | "new" | null>(null),
@@ -192,6 +196,9 @@ export default function AdminApp() {
             >
               <MapPin size={19} />
               {t("地点设置")}
+            </button>
+            <button className={tab === "raffle" ? "selected" : ""} onClick={()=>setTab("raffle")}>
+              <Dices size={19}/>{t("抽签彩蛋")}
             </button>
             <button
               className={tab === "security" ? "selected" : ""}
@@ -378,6 +385,11 @@ export default function AdminApp() {
               />
             </>
           )}
+          {tab === "raffle" && <>
+            <div className="admin-title-row"><div><div className="eyebrow">A LITTLE NUDGE</div><h1>{t("抽签彩蛋")}<span className="title-dot">.</span></h1>
+              <p>{t("连续抽签五次后，随机送上一句小小调侃。")}</p></div></div>
+            <RaffleSettingsForm settings={catalog.raffle} onSaved={async()=>{await reload();setNotice("抽签彩蛋设置已保存");}}/>
+          </>}
           {tab === "security" && (
             <>
               <div className="admin-title-row">
@@ -716,6 +728,32 @@ function PlaceForm({
   );
 }
 
+function RaffleSettingsForm({settings,onSaved}:{settings:RaffleSettings;onSaved:()=>Promise<void>}) {
+  const {t}=useLocale();
+  const [enabled,setEnabled]=useState(settings.enabled);
+  const [lines,setLines]=useState({zh:settings.lines_zh_hans.join("\n"),hant:settings.lines_zh_hant.join("\n"),en:settings.lines_en.join("\n")});
+  const [busy,setBusy]=useState(false),[error,setError]=useState("");
+  async function save(event:FormEvent) {
+    event.preventDefault();setBusy(true);setError("");
+    const split=(value:string)=>value.split(/\r?\n/).map(line=>line.trim()).filter(Boolean);
+    try {
+      await api("/api/admin/raffle-settings",{method:"PUT",body:JSON.stringify({enabled,
+        lines_zh_hans:split(lines.zh),lines_zh_hant:split(lines.hant),lines_en:split(lines.en)})});
+      await onSaved();
+    } catch(e){setError((e as Error).message);} finally{setBusy(false);}
+  }
+  return <form className="settings-card raffle-settings-form" onSubmit={(event)=>void save(event)}>
+    <label className="contribute-choice"><input type="checkbox" checked={enabled} onChange={event=>setEnabled(event.target.checked)}/>
+      <span>{t("启用第五次抽签彩蛋")}</span></label>
+    <p className="field-hint">{t("每行一句，最多 12 句；展示时会从当前语言的文案中随机挑选。")}</p>
+    <label className="field">{t("简体中文文案")}<textarea rows={5} maxLength={1500} value={lines.zh} onChange={event=>setLines(current=>({...current,zh:event.target.value}))}/></label>
+    <label className="field">{t("繁体中文文案")}<textarea rows={5} maxLength={1500} value={lines.hant} onChange={event=>setLines(current=>({...current,hant:event.target.value}))}/></label>
+    <label className="field">{t("英文文案")}<textarea rows={5} maxLength={1500} value={lines.en} onChange={event=>setLines(current=>({...current,en:event.target.value}))}/></label>
+    <ErrorNotice message={error}/>
+    <button className="primary-button" disabled={busy}>{t("保存彩蛋设置")} <Check size={16}/></button>
+  </form>;
+}
+
 function RestaurantEditor({
   restaurant,
   onClose,
@@ -737,6 +775,11 @@ function RestaurantEditor({
     description: restaurant?.description || "",
     description_zh_hant: restaurant?.description_zh_hant || "",
     description_en: restaurant?.description_en || "",
+    opens_app: restaurant?.opens_app || 0,
+    wechat_mini_program: restaurant?.wechat_mini_program || 0,
+    other_note: restaurant?.other_note || "",
+    other_note_zh_hant: restaurant?.other_note_zh_hant || "",
+    other_note_en: restaurant?.other_note_en || "",
     url: restaurant?.url || "",
     image_id: restaurant?.image_id || null,
     status: (restaurant?.status === "disabled"
@@ -1000,6 +1043,7 @@ function RestaurantEditor({
             )}
           </section>
         </div>}
+        <div className="editor-order-notes"><h3>{t("点餐方式备注")}</h3><OrderNotesFields value={form} onChange={patch=>setForm(current=>({...current,...patch}))}/></div>
         <details className="optional-details">
           <summary>
             <Settings2 size={17} />

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Check, Dices, RotateCw, Sparkles } from "lucide-react";
-import type { Restaurant } from "../shared/types";
+import type { RaffleSettings, Restaurant } from "../shared/types";
 import { localizedRestaurant, useLocale } from "./locale";
 import { categories, Modal } from "./ui";
 
@@ -21,10 +21,12 @@ function choices(restaurants: Restaurant[], mode: "restaurant" | "window"): Choi
 
 export function Raffle({
   restaurants,
+  settings,
   onClose,
   onChooseRestaurant,
 }: {
   restaurants: Restaurant[];
+  settings?: RaffleSettings;
   onClose: () => void;
   onChooseRestaurant: (restaurant: Restaurant) => void;
 }) {
@@ -37,6 +39,8 @@ export function Raffle({
   const [spinning, setSpinning] = useState(false);
   const [rolling, setRolling] = useState<Choice | null>(null);
   const [winner, setWinner] = useState<Choice | null>(null);
+  const [easterLine,setEasterLine]=useState("");
+  const drawCount=useRef(0);
   const interval = useRef<number | undefined>(undefined);
   const timeout = useRef<number | undefined>(undefined);
   useEffect(
@@ -91,11 +95,20 @@ export function Raffle({
     setWinner(null);
     setRolling(null);
   }
+  function finishDraw(choice:Choice) {
+    setWinner(choice);
+    drawCount.current+=1;
+    if(drawCount.current===5&&settings?.enabled){
+      const lines=locale==="zh-Hant"?settings.lines_zh_hant:locale==="en"?settings.lines_en:settings.lines_zh_hans;
+      const available=lines.length?lines:settings.lines_zh_hans;
+      if(available.length)setEasterLine(available[Math.floor(Math.random()*available.length)]);
+    }
+  }
   function draw() {
     if (spinning || pool.length === 0) return;
     setWinner(null);
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setWinner(pool[Math.floor(Math.random() * pool.length)]);
+      finishDraw(pool[Math.floor(Math.random() * pool.length)]);
       return;
     }
     setSpinning(true);
@@ -111,7 +124,7 @@ export function Raffle({
       window.clearInterval(interval.current);
       setSpinning(false);
       setRolling(null);
-      setWinner(pool[Math.floor(Math.random() * pool.length)]);
+      finishDraw(pool[Math.floor(Math.random() * pool.length)]);
     }, 1900);
   }
 
@@ -123,7 +136,8 @@ export function Raffle({
             <Sparkles size={16} /> QRCode PICK
           </span>
           <h3>{t("是啊，吃什么？")}</h3>
-          <div
+          <button type="button" onClick={draw} disabled={spinning||pool.length===0}
+            aria-label={t(winner?"再点圆圈抽一次":"点击圆圈开始抽签")}
             className={`raffle-orbit ${spinning ? "is-spinning" : ""} ${winner ? "has-winner" : ""}`}
           >
             <div className="raffle-orbit-inner">
@@ -140,15 +154,16 @@ export function Raffle({
                       {winner.windowName ? `${t(winner.windowName)} · ` : ""}{t(winner.restaurant.category)}
                     </span>
                   )}
+                  {winner&&<small>{t("再点圆圈抽一次")}</small>}
                 </>
               ) : (
                 <>
                   <Dices size={52} strokeWidth={1.4} />
-                  <span>{t("交给运气决定")}</span>
+                  <span>{t("点击圆圈开始抽签")}</span>
                 </>
               )}
             </div>
-          </div>
+          </button>
           <div className="raffle-result" aria-live="polite">
             {winner ? (
               mode === "restaurant" && winner.restaurant.windows.length ? (
@@ -264,6 +279,10 @@ export function Raffle({
           </button>
         </section>
       </div>
+      {easterLine&&<Modal title={t("还没决定吗")} onClose={()=>setEasterLine("")}>
+        <p className="raffle-easter-line">{easterLine}</p>
+        <button className="primary-button full" onClick={()=>setEasterLine("")}>{t("知道啦")}</button>
+      </Modal>}
     </Modal>
   );
 }

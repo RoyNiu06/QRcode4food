@@ -65,6 +65,11 @@ export function validateRestaurant(input: Record<string, unknown>) {
     description: textField(input.description, "简介", 160),
     description_zh_hant: textField(input.description_zh_hant, "繁体简介", 160),
     description_en: textField(input.description_en, "英文简介", 160),
+    opens_app: input.opens_app === true || input.opens_app === 1 ? 1 : 0,
+    wechat_mini_program: input.wechat_mini_program === true || input.wechat_mini_program === 1 ? 1 : 0,
+    other_note: textField(input.other_note, "其他说明", 160),
+    other_note_zh_hant: textField(input.other_note_zh_hant, "繁体其他说明", 160),
+    other_note_en: textField(input.other_note_en, "英文其他说明", 160),
     url:
       input.url == null ||
       input.url === "" ||
@@ -93,15 +98,68 @@ export function validateWindow(input: Record<string, unknown>) {
   };
 }
 export function validateContribution(input: Record<string, unknown>) {
+  const mode = input.mode == null ? "legacy" : textField(input.mode, "投稿类型", 20, true);
+  if (!["legacy", "restaurant", "update"].includes(mode)) throw new InputError("投稿类型不正确");
   const restaurantId = input.restaurant_id == null || input.restaurant_id === ""
     ? null : textField(input.restaurant_id, "餐厅编号", 80, true);
   if (restaurantId && !/^[a-f0-9-]{36}$/.test(restaurantId))
     throw new InputError("餐厅编号不正确");
+  if (mode === "restaurant" && restaurantId) throw new InputError("新餐厅不能指定现有餐厅");
+  if (mode === "update" && !restaurantId) throw new InputError("请选择要补充的餐厅");
+  const includeMain = mode === "legacy" ? true : input.include_main === true || input.include_main === 1;
+  if (mode !== "legacy" && ![true,false,0,1].includes(input.include_main as boolean))
+    throw new InputError("主入口选项不正确");
   const rawUrl = textField(input.url, "点餐网址", 4096);
   return {
+    mode: mode as "legacy" | "restaurant" | "update",
+    include_main: includeMain,
     restaurant_id: restaurantId,
     restaurant_name: textField(input.restaurant_name, "餐厅名称", 80, true),
     window_name: textField(input.window_name, "窗口名称", 80),
-    url: rawUrl ? validateUrl(rawUrl) : "",
+    url: includeMain && rawUrl ? validateUrl(rawUrl) : "",
+    name_zh_hant: textField(input.name_zh_hant, "繁体名称", 80),
+    name_en: textField(input.name_en, "英文名称", 80),
+    address: textField(input.address, "地址", 160),
+    address_zh_hant: textField(input.address_zh_hant, "繁体位置", 160),
+    address_en: textField(input.address_en, "英文位置", 160),
+    category: textField(input.category, "分类", 20) || "其他",
+    description: textField(input.description, "简介", 160),
+    description_zh_hant: textField(input.description_zh_hant, "繁体简介", 160),
+    description_en: textField(input.description_en, "英文简介", 160),
+    opens_app: input.opens_app === true || input.opens_app === 1 ? 1 : 0,
+    wechat_mini_program: input.wechat_mini_program === true || input.wechat_mini_program === 1 ? 1 : 0,
+    other_note: textField(input.other_note, "其他说明", 160),
+    other_note_zh_hant: textField(input.other_note_zh_hant, "繁体其他说明", 160),
+    other_note_en: textField(input.other_note_en, "英文其他说明", 160),
+  };
+}
+
+export function validateContributionWindows(input: unknown) {
+  if (!Array.isArray(input) || input.length > 10) throw new InputError("每次最多补充 10 个窗口");
+  return input.map((raw, index) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new InputError("窗口内容不正确");
+    const item = raw as Record<string, unknown>;
+    const rawUrl = textField(item.url, "点餐网址", 4096);
+    return {
+      id: item.id == null ? "" : textField(item.id, "窗口编号", 80),
+      name: textField(item.name, "窗口名称", 80, true),
+      url: rawUrl ? validateUrl(rawUrl) : "",
+      included: item.included !== false && item.included !== 0,
+      sort_order: index,
+    };
+  });
+}
+
+export function validateRaffleSettings(input: Record<string, unknown>) {
+  if (typeof input.enabled !== "boolean") throw new InputError("请选择是否启用彩蛋");
+  function lines(value: unknown, label: string) {
+    if (!Array.isArray(value) || value.length > 12) throw new InputError(`${label}最多 12 句`);
+    return value.map(item=>textField(item,label,120,true));
+  }
+  return {
+    enabled:input.enabled,
+    lines_zh_hans:lines(input.lines_zh_hans,"简体彩蛋"),
+    lines_zh_hant:lines(input.lines_zh_hant,"繁体彩蛋"),
+    lines_en:lines(input.lines_en,"英文彩蛋"),
   };
 }
