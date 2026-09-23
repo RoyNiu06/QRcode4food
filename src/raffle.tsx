@@ -11,7 +11,7 @@ function choices(restaurants: Restaurant[], mode: "restaurant" | "window"): Choi
   }));
   return restaurants.flatMap((restaurant) => [
     ...(restaurant.url ? [{
-      id: `primary:${restaurant.id}`, restaurant, windowName: "主点餐入口", url: restaurant.url,
+      id: `primary:${restaurant.id}`, restaurant, windowName: restaurant.windows.length ? "主点餐入口" : "", url: restaurant.url,
     }] : []),
     ...restaurant.windows.filter((window) => window.url).map((window) => ({
       id: window.id, restaurant, windowName: window.name, url: window.url,
@@ -159,7 +159,7 @@ export function Raffle({
               ) : winner.url ? (
                 <a
                   className="primary-button"
-                  href={winner.url}
+                  href={winner.id.startsWith("primary:") || mode === "restaurant" ? `/go/restaurant/${winner.restaurant.id}` : `/go/window/${winner.id}`}
                   rel="noreferrer"
                 >
                   {t("去这家点餐")} <ArrowRight size={17} />

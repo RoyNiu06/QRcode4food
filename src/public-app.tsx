@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Dices,
   UsersRound,
+  Heart, List, LayoutGrid, ArrowDownUp, Trophy,
 } from "lucide-react";
 import type { Catalog, Restaurant } from "../shared/types";
 import {
@@ -21,6 +22,7 @@ import {
 } from "./locale";
 import { Raffle } from "./raffle";
 import { Contribute } from "./contribute";
+import { SortDialog, RankingsDialog, storedIds, storeIds } from "./directory-extras";
 import {
   api,
   Brand,
@@ -53,7 +55,13 @@ export function PublicApp() {
     [error, setError] = useState(""),
     [loading, setLoading] = useState(true);
   const [query, setQuery] = useState(() => saved("qr-search")),
-    [category, setCategory] = useState(() => saved("qr-category") || "全部");
+    [category, setCategory] = useState(() => saved("qr-category") || "全部"),
+    [view, setView] = useState<"cards"|"list">(() => {try{return localStorage.getItem("qr-view-v1") === "list" ? "list" : "cards";}catch{return "cards";}}),
+    [favorites, setFavorites] = useState<string[]>(() => storedIds("qr-favorites-v1")),
+    [order, setOrder] = useState<string[]>(() => storedIds("qr-order-v1")),
+    [onlyFavorites, setOnlyFavorites] = useState(false),
+    [sortOpen, setSortOpen] = useState(false),
+    [rankingsOpen, setRankingsOpen] = useState(false);
   const [selected, setSelected] = useState<Restaurant | null>(null),
     [raffleOpen, setRaffleOpen] = useState(false),
     [contributeOpen, setContributeOpen] = useState(false),
@@ -81,6 +89,9 @@ export function PublicApp() {
     remember("qr-search", query);
     remember("qr-category", category);
   }, [query, category]);
+  useEffect(() => { storeIds("qr-favorites-v1",favorites); },[favorites]);
+  useEffect(() => { storeIds("qr-order-v1",order); },[order]);
+  useEffect(() => { try{localStorage.setItem("qr-view-v1",view);}catch{/* Storage may be unavailable. */} },[view]);
   useEffect(() => {
     if (!data) return;
     const y = Number(saved("qr-scroll")) || 0;
@@ -98,15 +109,20 @@ export function PublicApp() {
   }, [available, category, data]);
   const filtered = useMemo(
     () =>
-      data?.restaurants.filter(
+      (data?.restaurants.filter(
         (r) =>
+          (!onlyFavorites || favorites.includes(r.id)) &&
           (category === "全部" || r.category === category) &&
           `${r.name} ${r.name_zh_hant} ${r.name_en} ${r.address} ${r.address_zh_hant} ${r.address_en} ${r.description} ${r.description_zh_hant} ${r.description_en} ${r.category} ${t(r.category)} ${r.windows.map((w) => w.name).join(" ")}`
             .toLowerCase()
             .includes(query.trim().toLowerCase()),
-      ) || [],
-    [data, query, category, locale],
+      ) || []).sort((a,b) => {
+        const aIndex=order.indexOf(a.id), bIndex=order.indexOf(b.id);
+        return (aIndex<0 ? Number.MAX_SAFE_INTEGER : aIndex)-(bIndex<0 ? Number.MAX_SAFE_INTEGER : bIndex);
+      }),
+    [data, query, category, locale, onlyFavorites, favorites, order],
   );
+  function toggleFavorite(id:string) {setFavorites(current=>current.includes(id)?current.filter(value=>value!==id):[...current,id]);}
   function openQr(restaurant: Restaurant) {
     setSelected(restaurant);
     setCopied(false);
@@ -175,6 +191,11 @@ export function PublicApp() {
               )}
             </div>
           </div>
+          <div className="home-actions">
+            <button type="button" className="raffle-entry" onClick={() => setRaffleOpen(true)}><Dices size={17}/><span>{t("今天吃什么")}</span><ArrowRight size={15}/></button>
+            <button type="button" className="contribute-entry" onClick={() => setContributeOpen(true)}><UsersRound size={16}/>{t("一起补充")}</button>
+            <button type="button" className="ranking-entry" onClick={() => setRankingsOpen(true)}><Trophy size={16}/>{t("跳转排行")}</button>
+          </div>
           <div className="filter-row">
             <div className="filters" aria-label={t("餐厅分类")}>
               {available.map((item) => (
@@ -187,19 +208,15 @@ export function PublicApp() {
                   {t(item)}
                 </button>
               ))}
+              <button className={`filter-chip favorite-filter ${onlyFavorites ? "active" : ""}`} aria-pressed={onlyFavorites} onClick={() => setOnlyFavorites(value=>!value)}><Heart size={15} fill={onlyFavorites?"currentColor":"none"}/>{t("收藏")}</button>
             </div>
-            <button
-              type="button"
-              className="raffle-entry"
-              onClick={() => setRaffleOpen(true)}
-            >
-              <Dices size={17} />
-              <span>{t("今天吃什么")}</span>
-              <ArrowRight size={15} />
-            </button>
-            <button type="button" className="contribute-entry" onClick={() => setContributeOpen(true)}>
-              <UsersRound size={16} /> {t("一起补充")}
-            </button>
+            <div className="directory-view-tools">
+              <button className="view-tool" onClick={()=>setSortOpen(true)} aria-label={t("自定义排序")} title={t("自定义排序")}><ArrowDownUp size={17}/><span>{t("排序")}</span></button>
+              <div className="view-toggle" role="group" aria-label={t("显示方式")}>
+                <button className={view==="cards"?"active":""} aria-label={t("卡片视图")} aria-pressed={view==="cards"} onClick={()=>setView("cards")}><LayoutGrid size={17}/></button>
+                <button className={view==="list"?"active":""} aria-label={t("列表视图")} aria-pressed={view==="list"} onClick={()=>setView("list")}><List size={17}/></button>
+              </div>
+            </div>
           </div>
           {loading ? (
             <div
@@ -225,7 +242,7 @@ export function PublicApp() {
               </button>
             </div>
           ) : filtered.length ? (
-            <div className="restaurant-grid">
+            <div className={`restaurant-grid ${view === "list" ? "list-view" : ""}`}>
               {filtered.map((r, i) => (
                 <article className="restaurant-card" key={r.id}>
                   <div className="card-top">
@@ -238,6 +255,7 @@ export function PublicApp() {
                     <span className="card-number">
                       {String(i + 1).padStart(2, "0")}
                     </span>
+                    <button className={`favorite-button ${favorites.includes(r.id)?"is-favorite":""}`} onClick={()=>toggleFavorite(r.id)} aria-label={`${favorites.includes(r.id)?t("取消收藏"):t("收藏")}：${localizedRestaurant(r,"name",locale)}`} aria-pressed={favorites.includes(r.id)} title={favorites.includes(r.id)?t("取消收藏"):t("收藏")}><Heart size={19} fill={favorites.includes(r.id)?"currentColor":"none"}/></button>
                   </div>
                   <h3>{localizedRestaurant(r, "name", locale)}</h3>
                   <p className="restaurant-address">
@@ -259,7 +277,7 @@ export function PublicApp() {
                     ) : r.url ? (
                       <a
                         className="order-button"
-                        href={r.url}
+                        href={`/go/restaurant/${r.id}`}
                         rel="noreferrer"
                         onClick={() =>
                           remember("qr-scroll", String(window.scrollY))
@@ -352,7 +370,7 @@ export function PublicApp() {
               </p>
               <a
                 className="primary-button full"
-                href={selected.url}
+                href={`/go/restaurant/${selected.id}`}
                 rel="noreferrer"
               >
                 {t("开始点餐")} <ExternalIcon />
@@ -374,6 +392,8 @@ export function PublicApp() {
           )}
         </Modal>
       )}
+      {sortOpen && <SortDialog restaurants={data?.restaurants || []} order={order} onChange={setOrder} onClose={()=>setSortOpen(false)}/>}
+      {rankingsOpen && <RankingsDialog restaurants={data?.restaurants || []} onClose={()=>setRankingsOpen(false)}/>}
     </div>
   );
 }
@@ -393,7 +413,7 @@ function WindowMenu({ restaurant, onClose }: { restaurant: Restaurant; onClose: 
       {entries.map((entry, index) => <div className="window-choice" key={entry.id}>
         <span className="window-index">{String(index + 1).padStart(2, "0")}</span>
         <strong>{entry.name}</strong>
-        {entry.url ? <a className="primary-button" href={entry.url} rel="noreferrer">
+        {entry.url ? <a className="primary-button" href={entry.id===restaurant.id?`/go/restaurant/${restaurant.id}`:`/go/window/${entry.id}`} rel="noreferrer">
           {t("开始点餐")} <ExternalIcon />
         </a> : <span className="order-unavailable">{t("点餐入口待补充")}</span>}
         {entry.image_id && <button type="button" className="icon-button" aria-label={`${t("查看二维码")} ${entry.name}`} onClick={() => setImage(image === entry.image_id ? null : entry.image_id)}><QrCode size={19} /></button>}

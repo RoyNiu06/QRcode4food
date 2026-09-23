@@ -240,6 +240,47 @@ async function route(
   if (path === "/api/catalog" && method === "GET") {
     return json(await getCatalog(env));
   }
+  if (path.startsWith("/go/") && method === "GET") {
+    const match = /^\/go\/(restaurant|window)\/([a-f0-9-]{36})$/.exec(path);
+    if (!match) throw new HttpError("点餐入口不存在", 404);
+    const row = match[1] === "restaurant"
+      ? await env.DB.prepare("SELECT id AS restaurant_id, NULL AS window_id, url FROM restaurants WHERE id=? AND status='published' AND url<>''").bind(match[2]).first<{restaurant_id:string;window_id:string|null;url:string}>()
+      : await env.DB.prepare("SELECT r.id AS restaurant_id,w.id AS window_id,w.url FROM windows w JOIN restaurants r ON r.id=w.restaurant_id WHERE w.id=? AND r.status='published' AND w.url<>''").bind(match[2]).first<{restaurant_id:string;window_id:string|null;url:string}>();
+    if (!row) throw new HttpError("点餐入口不存在", 404);
+    await env.DB.prepare("INSERT INTO outbound_clicks(id,restaurant_id,window_id,clicked_at) VALUES(?,?,?,?)")
+      .bind(crypto.randomUUID(), row.restaurant_id, row.window_id, Math.floor(Date.now()/1000)).run();
+    return new Response(null, {status: 302, headers: {Location: row.url, "Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex"}});
+  }
+  if (path === "/api/rankings" && method === "GET") {
+    const period = url.searchParams.get("period") || "today";
+    const unit = url.searchParams.get("unit") || "restaurant";
+    if (!["today","24h","week"].includes(period) || !["restaurant","window"].includes(unit))
+      throw new InputError("排行参数不正确");
+    const now = Math.floor(Date.now()/1000);
+    const start = period === "today" ? Math.floor((now+28800)/86400)*86400-28800 : now-(period === "24h" ? 86400 : 604800);
+    const duration = period === "today" ? 86400 : now-start;
+    const previousStart = start-duration;
+    const previousEnd = period === "today" ? now-86400 : start;
+    const catalog = await getCatalog(env);
+    const rows = await env.DB.prepare(`SELECT restaurant_id,window_id,
+      SUM(CASE WHEN clicked_at>=? THEN 1 ELSE 0 END) AS current_count,
+      SUM(CASE WHEN clicked_at>=? AND clicked_at<? THEN 1 ELSE 0 END) AS previous_count
+      FROM outbound_clicks WHERE clicked_at>=? AND clicked_at<?
+      GROUP BY restaurant_id,window_id`).bind(start,previousStart,previousEnd,previousStart,now).all<{restaurant_id:string;window_id:string|null;current_count:number;previous_count:number}>();
+    const counts = new Map(rows.results.map(row => [`${row.restaurant_id}:${row.window_id || "primary"}`, row]));
+    const entries = unit === "restaurant"
+      ? catalog.restaurants.map(r => ({id:r.id,restaurant_id:r.id,window_id:null as string|null}))
+      : catalog.restaurants.flatMap(r => [
+          ...(r.url ? [{id:`primary:${r.id}`,restaurant_id:r.id,window_id:null as string|null}] : []),
+          ...r.windows.filter(w=>w.url).map(w=>({id:w.id,restaurant_id:r.id,window_id:w.id as string|null})),
+        ]);
+    const items = entries.map(entry => {
+      const relevant = unit === "restaurant" ? rows.results.filter(row=>row.restaurant_id===entry.restaurant_id) : [counts.get(`${entry.restaurant_id}:${entry.window_id || "primary"}`)];
+      return {...entry, count:relevant.reduce((sum,row)=>sum+(row?.current_count || 0),0), previous_count:relevant.reduce((sum,row)=>sum+(row?.previous_count || 0),0)};
+    });
+    const rank = (count:number, key:"count"|"previous_count") => 1+items.filter(item=>item[key]>count).length;
+    return json({period,unit,as_of:now,items:items.map(item=>({...item,rank:item.count ? rank(item.count,"count") : 0,previous_rank:item.previous_count ? rank(item.previous_count,"previous_count") : null})).sort((a,b)=>b.count-a.count || a.id.localeCompare(b.id))});
+  }
   if (path.startsWith("/media/") && (method === "GET" || method === "HEAD")) {
     const id = path.slice(7);
     if (!/^[a-f0-9-]{36}$/.test(id)) throw new HttpError("图片不存在", 404);
@@ -669,6 +710,7 @@ export default {
       env.DB.prepare("DELETE FROM sessions WHERE expires<?").bind(now),
       env.DB.prepare("DELETE FROM rate_limits WHERE expires<?").bind(now),
       env.DB.prepare("DELETE FROM contribution_quotas WHERE expires_at<?").bind(now - 86400),
+      env.DB.prepare("DELETE FROM outbound_clicks WHERE clicked_at<?").bind(now - 30*86400),
     ]);
     const stale = await env.DB.prepare(
       `SELECT id FROM images WHERE created_at < datetime('now','-1 day')
