@@ -149,7 +149,7 @@ export function PublicApp() {
             <div className="section-heading">
               <h2>{t("附近好味")}</h2>
               <span className="count-label">
-                {data?.restaurants.length ?? "—"} {t("家餐厅")}
+                {data?.restaurants.length ?? "—"} {t(locale === "en" && data?.restaurants.length === 1 ? "家餐厅单数" : "家餐厅")}
               </span>
             </div>
             <div className="search-field">

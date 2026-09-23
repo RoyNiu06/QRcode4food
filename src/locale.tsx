@@ -22,6 +22,7 @@ const translations: Record<string, [string, string]> = {
   "是啊，吃什么？": ["是啊，吃什麼？", "Yes, what should we eat?"],
   附近好味: ["附近好味", "Good food nearby"],
   家餐厅: ["家餐廳", "restaurants"],
+  家餐厅单数: ["家餐廳", "restaurant"],
   搜索餐厅: ["搜尋餐廳", "Search restaurants"],
   "想吃什么？搜搜店名或美食": [
     "想吃什麼？搜尋店名或美食",
