@@ -8,7 +8,7 @@ type Draft = { key: string; name: string; url: string; blob: Blob; preview: stri
 export function WindowManager({ restaurant, onClose, onChanged }: {
   restaurant: Restaurant;
   onClose: () => void;
-  onChanged: () => Promise<void>;
+  onChanged: () => Promise<unknown>;
 }) {
   const { locale, t } = useLocale();
   const [windows, setWindows] = useState(restaurant.windows);

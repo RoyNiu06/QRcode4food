@@ -59,7 +59,9 @@ export default function AdminApp() {
     [deleting, setDeleting] = useState<Restaurant | null>(null),
     [busy, setBusy] = useState(false);
   async function reload() {
-    setCatalog(await api<Catalog>("/api/admin/catalog"));
+    const next = await api<Catalog>("/api/admin/catalog");
+    setCatalog(next);
+    return next;
   }
   async function loadSession() {
     try {
@@ -405,10 +407,18 @@ export default function AdminApp() {
         <RestaurantEditor
           restaurant={editing === "new" ? null : editing}
           onClose={() => setEditing(null)}
-          onSaved={async () => {
+          onSaved={async (id, openWindows) => {
             setEditing(null);
-            await reload();
-            setNotice("餐厅已保存，已发布内容会显示在首页");
+            try {
+              const next = await reload();
+              setNotice("餐厅已保存，已发布内容会显示在首页");
+              if (openWindows) {
+                const saved = next.restaurants.find((item) => item.id === id);
+                if (saved) requestAnimationFrame(() => setManagingWindows(saved));
+              }
+            } catch (e) {
+              setError((e as Error).message);
+            }
           }}
         />
       )}
@@ -713,7 +723,7 @@ function RestaurantEditor({
 }: {
   restaurant: Restaurant | null;
   onClose: () => void;
-  onSaved: () => Promise<void>;
+  onSaved: (id: string, openWindows: boolean) => Promise<void>;
 }) {
   const { t } = useLocale();
   const [form, setForm] = useState({
@@ -738,6 +748,7 @@ function RestaurantEditor({
     [uploading, setUploading] = useState(false),
     [error, setError] = useState(""),
     [uploadNote, setUploadNote] = useState("");
+  const [skipMain, setSkipMain] = useState(false);
   const [preview, setPreview] = useState(
       restaurant?.image_id ? `/media/${restaurant.image_id}` : "",
     ),
@@ -811,9 +822,9 @@ function RestaurantEditor({
     const status = (action || form.status) as RestaurantStatus;
     setBusy(true);
     try {
-      const url = form.url.trim() ? validateUrl(form.url) : "";
-      let imageId = form.image_id;
-      if (fileBlob) {
+      const url = skipMain ? "" : form.url.trim() ? validateUrl(form.url) : "";
+      let imageId = skipMain ? null : form.image_id;
+      if (fileBlob && !skipMain) {
         const result = await api<{ id: string }>("/api/admin/images", {
           method: "POST",
           headers: { "Content-Type": fileBlob.type },
@@ -823,14 +834,14 @@ function RestaurantEditor({
         setForm((f) => ({ ...f, image_id: imageId }));
         setFileBlob(null);
       }
-      await api(
+      const saved = await api<{ id?: string }>(
         `/api/admin/restaurants${restaurant ? "/" + restaurant.id : ""}`,
         {
           method: restaurant ? "PUT" : "POST",
           body: JSON.stringify({ ...form, url, status, image_id: imageId }),
         },
       );
-      await onSaved();
+      await onSaved(restaurant?.id || saved.id || "", !restaurant && skipMain && status === "published");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -889,7 +900,22 @@ function RestaurantEditor({
             </label>
           </div>
         </details>
-        <div className="quick-entry-grid">
+        {!restaurant && <label className={`skip-main-choice ${skipMain ? "selected" : ""}`}>
+          <input type="checkbox" checked={skipMain} disabled={disabled} onChange={(e) => {
+            const checked = e.target.checked;
+            setSkipMain(checked);
+            if (checked) {
+              setForm((current) => ({ ...current, url: "", image_id: null }));
+              setFileBlob(null);
+              setPreview("");
+              setUploadNote("");
+              if (objectRef.current) URL.revokeObjectURL(objectRef.current);
+              objectRef.current = "";
+            }
+          }} />
+          <span><strong>{t("先不传主二维码")}</strong><small>{t("这个餐厅只有窗口二维码？保存后直接批量添加窗口。")}</small></span>
+        </label>}
+        {skipMain ? <div className="skip-main-note"><ImagePlus size={20} /><span>{t("保存餐厅后，将直接进入窗口批量上传。")}</span></div> : <div className="quick-entry-grid">
           <section className="quick-upload">
             <input
               ref={fileRef}
@@ -973,7 +999,7 @@ function RestaurantEditor({
               </p>
             )}
           </section>
-        </div>
+        </div>}
         <details className="optional-details">
           <summary>
             <Settings2 size={17} />
@@ -1129,6 +1155,8 @@ function RestaurantEditor({
               {t(
                 busy
                   ? "正在保存…"
+                  : !restaurant && skipMain && form.status === "published"
+                    ? "保存并添加窗口"
                   : form.status === "published"
                     ? "保存并发布"
                     : "保存修改",

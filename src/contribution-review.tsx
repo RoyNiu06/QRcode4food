@@ -7,7 +7,7 @@ import { api, ErrorNotice } from "./ui";
 type ReviewData = { submissions: Contribution[]; quotas: QuotaActivity[]; limit: number; window_seconds: number };
 export function ContributionReview({ restaurants, onPublished }: {
   restaurants: Restaurant[];
-  onPublished: () => Promise<void>;
+  onPublished: () => Promise<unknown>;
 }) {
   const { locale, t } = useLocale();
   const [data, setData] = useState<ReviewData | null>(null);
