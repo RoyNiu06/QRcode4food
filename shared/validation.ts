@@ -56,9 +56,15 @@ export function validateRestaurant(input: Record<string, unknown>) {
     throw new InputError("图片编号不正确");
   return {
     name: textField(input.name, "餐厅名称", 80, true),
+    name_zh_hant: textField(input.name_zh_hant, "繁体名称", 80),
+    name_en: textField(input.name_en, "英文名称", 80),
     address: textField(input.address, "地址", 160),
+    address_zh_hant: textField(input.address_zh_hant, "繁体位置", 160),
+    address_en: textField(input.address_en, "英文位置", 160),
     category: textField(input.category, "分类", 20) || "其他",
     description: textField(input.description, "简介", 160),
+    description_zh_hant: textField(input.description_zh_hant, "繁体简介", 160),
+    description_en: textField(input.description_en, "英文简介", 160),
     url:
       input.url == null ||
       input.url === "" ||

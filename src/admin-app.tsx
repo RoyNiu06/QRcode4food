@@ -27,6 +27,12 @@ import type {
   RestaurantStatus,
 } from "../shared/types";
 import { validateUrl } from "../shared/validation";
+import {
+  LanguageSwitch,
+  localizedPlace,
+  localizedRestaurant,
+  useLocale,
+} from "./locale";
 import { api, Brand, CategoryIcon, categories, ErrorNotice, Modal } from "./ui";
 
 const emptyCatalog: Catalog = {
@@ -36,6 +42,7 @@ const emptyCatalog: Catalog = {
 const statusLabel = { published: "已发布", draft: "草稿", disabled: "已停用" };
 
 export default function AdminApp() {
+  const { locale, t } = useLocale();
   const [session, setSession] = useState<AdminSession | null>(null),
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
@@ -57,9 +64,11 @@ export default function AdminApp() {
     }
   }
   useEffect(() => {
-    document.title = "管理空间 — QRCode";
     void loadSession();
   }, []);
+  useEffect(() => {
+    document.title = `${t("管理空间")} — QRCode`;
+  }, [locale]);
   useEffect(() => {
     if (session?.authenticated && !session.mustChange)
       void reload().catch((e) => setError(e.message));
@@ -92,16 +101,17 @@ export default function AdminApp() {
     return (
       <div className="auth-page">
         <Brand />
+        <LanguageSwitch />
         <div className="auth-card">
           <LoaderCircle className="spin" />
-          <p>正在打开管理空间…</p>
+          <p>{t("正在打开管理空间…")}</p>
           <ErrorNotice message={error} />
           {error && (
             <button
               className="secondary-button"
               onClick={() => void loadSession()}
             >
-              重试
+              {t("重试")}
             </button>
           )}
         </div>
@@ -113,13 +123,14 @@ export default function AdminApp() {
     return (
       <div className="auth-page">
         <Brand />
+        <LanguageSwitch />
         <div className="auth-card">
           <span className="auth-symbol">
             <ShieldCheck size={26} />
           </span>
           <div className="eyebrow">WELCOME TO YOUR SPACE</div>
-          <h1>先设置一个新密码</h1>
-          <p>完成设置后，就可以开始收集附近的好味道。</p>
+          <h1>{t("先设置一个新密码")}</h1>
+          <p>{t("完成设置后，就可以开始收集附近的好味道。")}</p>
           <PasswordForm
             initial
             onDone={() => {
@@ -134,15 +145,16 @@ export default function AdminApp() {
     <div className="admin-shell">
       <header className="admin-header">
         <Brand />
-        <span className="admin-badge">管理空间</span>
+        <span className="admin-badge">{t("管理空间")}</span>
         <div className="admin-header-actions">
+          <LanguageSwitch />
           <a href="/" className="text-button">
-            查看网站 <ExternalLink size={15} />
+            {t("查看网站")} <ExternalLink size={15} />
           </a>
           <button
             onClick={() => void logout()}
             className="icon-button"
-            aria-label="退出登录"
+            aria-label={t("退出登录")}
           >
             <LogOut size={19} />
           </button>
@@ -151,35 +163,36 @@ export default function AdminApp() {
       <div className="admin-layout">
         <aside className="admin-sidebar">
           <div className="sidebar-label">WORKSPACE</div>
-          <nav aria-label="管理导航">
+          <nav aria-label={t("管理导航")}>
             <button
               className={tab === "restaurants" ? "selected" : ""}
               onClick={() => setTab("restaurants")}
             >
               <LayoutGrid size={19} />
-              餐厅目录<span>{catalog.restaurants.length}</span>
+              {t("餐厅目录")}
+              <span>{catalog.restaurants.length}</span>
             </button>
             <button
               className={tab === "place" ? "selected" : ""}
               onClick={() => setTab("place")}
             >
               <MapPin size={19} />
-              地点设置
+              {t("地点设置")}
             </button>
             <button
               className={tab === "security" ? "selected" : ""}
               onClick={() => setTab("security")}
             >
               <LockKeyhole size={19} />
-              账户安全
+              {t("账户安全")}
             </button>
           </nav>
           <div className="sidebar-note">
             <span className="sidebar-note-icon">
               <Settings2 size={20} />
             </span>
-            <strong>小小目录，大大满足。</strong>
-            <p>把点餐入口整理好，让每一餐都简单一点。</p>
+            <strong>{t("小小目录，大大满足。")}</strong>
+            <p>{t("把点餐入口整理好，让每一餐都简单一点。")}</p>
           </div>
         </aside>
         <main className="admin-main">
@@ -187,11 +200,11 @@ export default function AdminApp() {
           {notice && (
             <div className="notice success" role="status">
               <CircleCheck size={17} />
-              {notice}
+              {t(notice)}
               <button
                 className="icon-button small"
                 onClick={() => setNotice("")}
-                aria-label="关闭提示"
+                aria-label={t("关闭提示")}
               >
                 <X size={16} />
               </button>
@@ -203,40 +216,43 @@ export default function AdminApp() {
                 <div>
                   <div className="eyebrow">THE NEIGHBORHOOD COLLECTION</div>
                   <h1>
-                    餐厅目录<span className="title-dot">.</span>
+                    {t("餐厅目录")}
+                    <span className="title-dot">.</span>
                   </h1>
-                  <p>整理好味道，让大家一点就开餐。</p>
+                  <p>{t("整理好味道，让大家一点就开餐。")}</p>
                 </div>
                 <button
                   className="primary-button"
                   onClick={() => setEditing("new")}
                 >
                   <Plus size={19} />
-                  添加餐厅
+                  {t("添加餐厅")}
                 </button>
               </div>
               <div className="stats-row">
                 <div>
-                  <span>全部餐厅</span>
+                  <span>{t("全部餐厅")}</span>
                   <strong>
                     {String(catalog.restaurants.length).padStart(2, "0")}
                   </strong>
                 </div>
                 <div>
-                  <span>正在展示</span>
+                  <span>{t("正在展示")}</span>
                   <strong>
                     {String(
                       catalog.restaurants.filter(
                         (r) => r.status === "published",
                       ).length,
                     ).padStart(2, "0")}
-                    <small>已发布</small>
+                    <small>{t("已发布")}</small>
                   </strong>
                 </div>
                 <div>
-                  <span>当前地点</span>
+                  <span>{t("当前地点")}</span>
                   <strong className="stat-place">
-                    {catalog.place.name || "还未设置"}
+                    {catalog.place.name
+                      ? localizedPlace(catalog.place.name, locale)
+                      : t("还未设置")}
                     <MapPin size={18} />
                   </strong>
                 </div>
@@ -244,22 +260,22 @@ export default function AdminApp() {
               {!catalog.place.name && (
                 <div className="setup-callout">
                   <div>
-                    <strong>为目录添加一个地点</strong>
-                    <p>选填，不影响添加和发布餐厅。</p>
+                    <strong>{t("为目录添加一个地点")}</strong>
+                    <p>{t("选填，不影响添加和发布餐厅。")}</p>
                   </div>
                   <button
                     className="secondary-button"
                     onClick={() => setTab("place")}
                   >
-                    设置地点 <ArrowRight size={16} />
+                    {t("设置地点")} <ArrowRight size={16} />
                   </button>
                 </div>
               )}
               {catalog.restaurants.length ? (
                 <div className="admin-list">
                   <div className="admin-list-heading">
-                    <span>餐厅 / 点餐入口</span>
-                    <span>状态与操作</span>
+                    <span>{t("餐厅 / 点餐入口")}</span>
+                    <span>{t("状态与操作")}</span>
                   </div>
                   {catalog.restaurants.map((r) => (
                     <div className="admin-list-row" key={r.id}>
@@ -269,26 +285,27 @@ export default function AdminApp() {
                         <CategoryIcon category={r.category} />
                       </span>
                       <div className="admin-restaurant-info">
-                        <h3>{r.name}</h3>
+                        <h3>{localizedRestaurant(r, "name", locale)}</h3>
                         <p>
-                          {r.category} <span>·</span>{" "}
-                          {r.address || catalog.place.name}
+                          {t(r.category)} <span>·</span>{" "}
+                          {localizedRestaurant(r, "address", locale) ||
+                            localizedPlace(catalog.place.name, locale)}
                         </p>
                       </div>
                       <span className={`status-pill ${r.status}`}>
-                        {statusLabel[r.status]}
+                        {t(statusLabel[r.status])}
                       </span>
                       <div className="row-actions">
                         <button
                           className="icon-button"
-                          aria-label={`编辑${r.name}`}
+                          aria-label={`${t("编辑")} ${localizedRestaurant(r, "name", locale)}`}
                           onClick={() => setEditing(r)}
                         >
                           <Pencil size={18} />
                         </button>
                         <button
                           className="icon-button danger-icon"
-                          aria-label={`删除${r.name}`}
+                          aria-label={`${t("删除")} ${localizedRestaurant(r, "name", locale)}`}
                           onClick={() => setDeleting(r)}
                         >
                           <Trash2 size={18} />
@@ -302,13 +319,13 @@ export default function AdminApp() {
                   <span className="empty-icon">
                     <ImagePlus size={30} />
                   </span>
-                  <h2>从第一张二维码开始</h2>
-                  <p>上传餐厅的点餐码，自动识别成可以点击的网址。</p>
+                  <h2>{t("从第一张二维码开始")}</h2>
+                  <p>{t("上传餐厅的点餐码，自动识别成可以点击的网址。")}</p>
                   <button
                     className="text-button"
                     onClick={() => setEditing("new")}
                   >
-                    添加第一家餐厅 <ArrowRight size={17} />
+                    {t("添加第一家餐厅")} <ArrowRight size={17} />
                   </button>
                 </div>
               )}
@@ -320,9 +337,10 @@ export default function AdminApp() {
                 <div>
                   <div className="eyebrow">A PLACE TO START</div>
                   <h1>
-                    地点设置<span className="title-dot">.</span>
+                    {t("地点设置")}
+                    <span className="title-dot">.</span>
                   </h1>
-                  <p>所有餐厅都会展示在这个地点的目录下。</p>
+                  <p>{t("所有餐厅都会展示在这个地点的目录下。")}</p>
                 </div>
               </div>
               <PlaceForm
@@ -340,13 +358,14 @@ export default function AdminApp() {
                 <div>
                   <div className="eyebrow">KEEP IT YOURS</div>
                   <h1>
-                    账户安全<span className="title-dot">.</span>
+                    {t("账户安全")}
+                    <span className="title-dot">.</span>
                   </h1>
-                  <p>修改密码后，所有已登录的设备都会退出。</p>
+                  <p>{t("修改密码后，所有已登录的设备都会退出。")}</p>
                 </div>
               </div>
               <div className="settings-card">
-                <h2>修改管理员密码</h2>
+                <h2>{t("修改管理员密码")}</h2>
                 <PasswordForm
                   onDone={() => {
                     setNotice("密码已更新，请重新登录");
@@ -371,14 +390,17 @@ export default function AdminApp() {
       )}
       {deleting && (
         <Modal
-          title="删除这家餐厅？"
+          title={t("删除这家餐厅？")}
           onClose={() => {
             if (!busy) setDeleting(null);
           }}
         >
           <p className="modal-description">
-            “{deleting.name}
-            ”将从目录中移除，此操作不能撤销。暂时不展示可以在编辑中改为“已停用”。
+            {locale === "zh-Hans" ? "“" : t("删除说明前")}
+            {localizedRestaurant(deleting, "name", locale)}
+            {locale === "zh-Hans"
+              ? "”将从目录中移除，此操作不能撤销。暂时不展示可以在编辑中改为“已停用”。"
+              : t("删除说明后")}
           </p>
           <ErrorNotice message={error} />
           <div className="form-actions">
@@ -387,14 +409,14 @@ export default function AdminApp() {
               disabled={busy}
               onClick={() => setDeleting(null)}
             >
-              取消
+              {t("取消")}
             </button>
             <button
               className="danger-button"
               disabled={busy}
               onClick={() => void remove()}
             >
-              {busy ? "正在删除…" : "确认删除"}
+              {t(busy ? "正在删除…" : "确认删除")}
             </button>
           </div>
         </Modal>
@@ -410,6 +432,7 @@ function Login({
   onLogin: (session: AdminSession) => void;
   notice: string;
 }) {
+  const { t } = useLocale();
   const [password, setPassword] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
@@ -458,9 +481,10 @@ function Login({
     <div className="auth-page">
       <header>
         <Brand />
+        <LanguageSwitch />
         <a className="text-button" href="/">
           <ArrowLeft size={16} />
-          返回目录
+          {t("返回目录")}
         </a>
       </header>
       <div className="auth-card">
@@ -468,17 +492,17 @@ function Login({
           <LockKeyhole size={26} />
         </span>
         <div className="eyebrow">A LITTLE SPACE FOR GOOD FOOD</div>
-        <h1>欢迎回来。</h1>
-        <p>登录管理空间，收集附近的好味道。</p>
-        {notice && <div className="notice success">{notice}</div>}
+        <h1>{t("欢迎回来。")}</h1>
+        <p>{t("登录管理空间，收集附近的好味道。")}</p>
+        {notice && <div className="notice success">{t(notice)}</div>}
         <form onSubmit={(e) => void submit(e)}>
           <label className="field">
-            管理员密码
+            {t("管理员密码")}
             <input
               type="password"
               required
               autoComplete="current-password"
-              placeholder="输入你的密码"
+              placeholder={t("输入你的密码")}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
@@ -489,14 +513,14 @@ function Login({
               <LoaderCircle className="spin" size={18} />
             ) : (
               <>
-                进入管理空间 <ArrowRight size={18} />
+                {t("进入管理空间")} <ArrowRight size={18} />
               </>
             )}
           </button>
         </form>
         <p className="auth-footnote">
           <ShieldCheck size={14} />
-          仅管理员可以上传与发布餐厅
+          {t("仅管理员可以上传与发布餐厅")}
         </p>
       </div>
       <span className="auth-bottom">QRCode / RoyiLab</span>
@@ -511,6 +535,7 @@ function PasswordForm({
   initial?: boolean;
   onDone: () => void;
 }) {
+  const { t } = useLocale();
   const [oldPassword, setOld] = useState(""),
     [password, setPassword] = useState(""),
     [confirm, setConfirm] = useState(""),
@@ -540,7 +565,7 @@ function PasswordForm({
   return (
     <form onSubmit={(e) => void submit(e)}>
       <label className="field">
-        {initial ? "初始密码" : "当前密码"}
+        {t(initial ? "初始密码" : "当前密码")}
         <input
           type="password"
           autoComplete="current-password"
@@ -550,20 +575,20 @@ function PasswordForm({
         />
       </label>
       <label className="field">
-        新密码
+        {t("新密码")}
         <input
           type="password"
           minLength={6}
           maxLength={128}
           autoComplete="new-password"
           required
-          placeholder="至少 6 位，支持纯数字"
+          placeholder={t("至少 6 位，支持纯数字")}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
       </label>
       <label className="field">
-        再次输入新密码
+        {t("再次输入新密码")}
         <input
           type="password"
           minLength={6}
@@ -576,7 +601,7 @@ function PasswordForm({
       </label>
       <ErrorNotice message={error} />
       <button className="primary-button" disabled={busy}>
-        {busy ? "正在更新…" : "保存新密码"}
+        {t(busy ? "正在更新…" : "保存新密码")}
         <Check size={17} />
       </button>
     </form>
@@ -590,6 +615,7 @@ function PlaceForm({
   place: Place;
   onSaved: () => Promise<void>;
 }) {
+  const { t } = useLocale();
   const [form, setForm] = useState(place),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -613,41 +639,41 @@ function PlaceForm({
     <div className="settings-card">
       <h2>
         <MapPin size={21} />
-        目录所在地点
+        {t("目录所在地点")}
       </h2>
       <form onSubmit={(e) => void submit(e)}>
         <label className="field">
-          地点名称
+          {t("地点名称")}
           <input
             required
             maxLength={80}
-            placeholder="例如：校园生活区 / 某某商场"
+            placeholder={t("例如：校园生活区 / 某某商场")}
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
           />
         </label>
         <label className="field">
-          详细地址 <span className="optional">选填</span>
+          {t("详细地址")} <span className="optional">{t("选填")}</span>
           <input
             maxLength={160}
-            placeholder="填写城市、街道与具体位置"
+            placeholder={t("填写城市、街道与具体位置")}
             value={form.address}
             onChange={(e) => setForm({ ...form, address: e.target.value })}
           />
         </label>
         <label className="field">
-          地点说明 <span className="optional">选填</span>
+          {t("地点说明")} <span className="optional">{t("选填")}</span>
           <textarea
             rows={3}
             maxLength={160}
-            placeholder="例如：集合附近可以直接在线点餐的餐厅"
+            placeholder={t("例如：集合附近可以直接在线点餐的餐厅")}
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
           />
         </label>
         <ErrorNotice message={error} />
         <button className="primary-button" disabled={busy}>
-          {busy ? "正在保存…" : "保存地点"}
+          {t(busy ? "正在保存…" : "保存地点")}
           <Check size={17} />
         </button>
       </form>
@@ -664,11 +690,18 @@ function RestaurantEditor({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
+  const { t } = useLocale();
   const [form, setForm] = useState({
     name: restaurant?.name || "",
+    name_zh_hant: restaurant?.name_zh_hant || "",
+    name_en: restaurant?.name_en || "",
     address: restaurant?.address || "",
+    address_zh_hant: restaurant?.address_zh_hant || "",
+    address_en: restaurant?.address_en || "",
     category: restaurant?.category || "中餐",
     description: restaurant?.description || "",
+    description_zh_hant: restaurant?.description_zh_hant || "",
+    description_en: restaurant?.description_en || "",
     url: restaurant?.url || "",
     image_id: restaurant?.image_id || null,
     status: (restaurant?.status === "disabled"
@@ -782,23 +815,55 @@ function RestaurantEditor({
   return (
     <Modal
       wide
-      title={restaurant ? "编辑餐厅" : "添加餐厅"}
+      title={t(restaurant ? "编辑餐厅" : "添加餐厅")}
       onClose={() => {
         if (!disabled) onClose();
       }}
     >
       <form className="quick-editor" onSubmit={(e) => void save(e)}>
-        <p className="editor-intro">只需填写店名。上传点餐码，网址自动填好。</p>
+        <p className="editor-intro">
+          {t("只需填写店名。上传点餐码，网址自动填好。")}
+        </p>
         <label className="field restaurant-name-field">
-          餐厅名称 <span className="required-tag">必填</span>
+          {t("餐厅名称")} <span className="required-tag">{t("必填")}</span>
           <input
             required
             maxLength={80}
-            placeholder="这家好味道叫什么？"
+            placeholder={t("这家好味道叫什么？")}
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
           />
         </label>
+        <details className="translation-details">
+          <summary>
+            {t("繁体中文与英文名称")}{" "}
+            <span>{t("可选，未填写时显示简体名称")}</span>
+          </summary>
+          <div className="field-columns">
+            <label className="field">
+              {t("繁体中文名称")}
+              <input
+                maxLength={80}
+                lang="zh-Hant"
+                value={form.name_zh_hant}
+                placeholder="繁體中文名稱"
+                onChange={(e) =>
+                  setForm({ ...form, name_zh_hant: e.target.value })
+                }
+              />
+            </label>
+            <label className="field">
+              {t("英文名称")}
+              <input
+                maxLength={80}
+                lang="en"
+                value={form.name_en}
+                placeholder="English name"
+                onChange={(e) => setForm({ ...form, name_en: e.target.value })}
+              />
+            </label>
+          </div>
+        </details>
         <div className="quick-entry-grid">
           <section className="quick-upload">
             <input
@@ -806,7 +871,7 @@ function RestaurantEditor({
               className="visually-hidden"
               type="file"
               accept="image/jpeg,image/png,image/webp"
-              aria-label="上传二维码照片"
+              aria-label={t("上传二维码照片")}
               disabled={disabled}
               onChange={(e) => void upload(e.target.files?.[0])}
             />
@@ -818,10 +883,10 @@ function RestaurantEditor({
             >
               {preview ? (
                 <>
-                  <img src={preview} alt="上传的二维码预览" />
+                  <img src={preview} alt={t("上传的二维码预览")} />
                   <span className="replace-image">
                     <Upload size={15} />
-                    更换二维码
+                    {t("更换二维码")}
                   </span>
                 </>
               ) : (
@@ -829,20 +894,21 @@ function RestaurantEditor({
                   <span className="upload-icon">
                     <ImagePlus size={27} />
                   </span>
-                  <strong>上传点餐二维码</strong>
-                  <span>从相册选择，自动识别网址</span>
-                  <small>选填 · JPG / PNG / WebP · 10 MB 内</small>
+                  <strong>{t("上传点餐二维码")}</strong>
+                  <span>{t("从相册选择，自动识别网址")}</span>
+                  <small>{t("选填 · JPG / PNG / WebP · 10 MB 内")}</small>
                 </>
               )}
             </button>
           </section>
           <section className="quick-link">
             <label className="field">
-              点餐链接 <span className="optional">自动识别 / 选填</span>
+              {t("点餐链接")}{" "}
+              <span className="optional">{t("自动识别 / 选填")}</span>
               <textarea
                 rows={3}
                 maxLength={4096}
-                placeholder="上传二维码自动填入，也可直接粘贴网址"
+                placeholder={t("上传二维码自动填入，也可直接粘贴网址")}
                 value={form.url}
                 onChange={(e) => setForm({ ...form, url: e.target.value })}
               />
@@ -859,7 +925,7 @@ function RestaurantEditor({
                 ) : (
                   <ImagePlus size={15} />
                 )}
-                <span>{uploadNote}</span>
+                <span>{t(uploadNote)}</span>
               </p>
             )}
             {form.url ? (
@@ -869,14 +935,16 @@ function RestaurantEditor({
                 disabled={disabled}
                 onClick={tryOpen}
               >
-                试打开链接 <ExternalLink size={15} />
+                {t("试打开链接")} <ExternalLink size={15} />
               </button>
             ) : (
-              <p className="field-hint">没有链接也能发布，之后随时补充。</p>
+              <p className="field-hint">
+                {t("没有链接也能发布，之后随时补充。")}
+              </p>
             )}
             {form.url.startsWith("http:") && (
               <p className="notice warning">
-                该链接使用 HTTP，请留意商家页面。
+                {t("该链接使用 HTTP，请留意商家页面。")}
               </p>
             )}
           </section>
@@ -885,23 +953,48 @@ function RestaurantEditor({
           <summary>
             <Settings2 size={17} />
             <span>
-              更多信息 <small>位置、分类、介绍等，均可不填</small>
+              {t("更多信息")} <small>{t("位置、分类、介绍等，均可不填")}</small>
             </span>
             <Plus size={16} />
           </summary>
           <div className="optional-fields">
             <label className="field">
-              位置 / 分店 <span className="optional">选填</span>
+              {t("位置 / 分店")} <span className="optional">{t("选填")}</span>
               <input
                 maxLength={160}
-                placeholder="例如：商场 2 楼"
+                placeholder={t("例如：商场 2 楼")}
                 value={form.address}
                 onChange={(e) => setForm({ ...form, address: e.target.value })}
               />
             </label>
             <div className="field-columns">
               <label className="field">
-                分类{" "}
+                {t("繁体中文位置")}{" "}
+                <span className="optional">{t("选填")}</span>
+                <input
+                  maxLength={160}
+                  lang="zh-Hant"
+                  value={form.address_zh_hant}
+                  onChange={(e) =>
+                    setForm({ ...form, address_zh_hant: e.target.value })
+                  }
+                />
+              </label>
+              <label className="field">
+                {t("英文位置")} <span className="optional">{t("选填")}</span>
+                <input
+                  maxLength={160}
+                  lang="en"
+                  value={form.address_en}
+                  onChange={(e) =>
+                    setForm({ ...form, address_en: e.target.value })
+                  }
+                />
+              </label>
+            </div>
+            <div className="field-columns">
+              <label className="field">
+                {t("分类")}{" "}
                 <select
                   value={form.category}
                   onChange={(e) =>
@@ -909,12 +1002,12 @@ function RestaurantEditor({
                   }
                 >
                   {categories.map((c) => (
-                    <option key={c}>{c}</option>
+                    <option key={c}>{t(c)}</option>
                   ))}
                 </select>
               </label>
               <label className="field">
-                排序{" "}
+                {t("排序")}{" "}
                 <input
                   type="number"
                   min={0}
@@ -928,20 +1021,47 @@ function RestaurantEditor({
               </label>
             </div>
             <label className="field">
-              一句话介绍 <span className="optional">选填</span>
+              {t("一句话介绍")} <span className="optional">{t("选填")}</span>
               <textarea
                 rows={2}
                 maxLength={160}
-                placeholder="招牌菜、口味，或者一句推荐"
+                placeholder={t("招牌菜、口味，或者一句推荐")}
                 value={form.description}
                 onChange={(e) =>
                   setForm({ ...form, description: e.target.value })
                 }
               />
             </label>
+            <div className="field-columns">
+              <label className="field">
+                {t("繁体中文介绍")}{" "}
+                <span className="optional">{t("选填")}</span>
+                <textarea
+                  rows={2}
+                  maxLength={160}
+                  lang="zh-Hant"
+                  value={form.description_zh_hant}
+                  onChange={(e) =>
+                    setForm({ ...form, description_zh_hant: e.target.value })
+                  }
+                />
+              </label>
+              <label className="field">
+                {t("英文介绍")} <span className="optional">{t("选填")}</span>
+                <textarea
+                  rows={2}
+                  maxLength={160}
+                  lang="en"
+                  value={form.description_en}
+                  onChange={(e) =>
+                    setForm({ ...form, description_en: e.target.value })
+                  }
+                />
+              </label>
+            </div>
             {restaurant && (
               <label className="field">
-                展示状态
+                {t("展示状态")}
                 <select
                   value={form.status}
                   onChange={(e) =>
@@ -951,9 +1071,9 @@ function RestaurantEditor({
                     })
                   }
                 >
-                  <option value="published">发布到首页</option>
-                  <option value="draft">草稿</option>
-                  <option value="disabled">暂时停用</option>
+                  <option value="published">{t("发布到首页")}</option>
+                  <option value="draft">{t("草稿")}</option>
+                  <option value="disabled">{t("暂时停用")}</option>
                 </select>
               </label>
             )}
@@ -968,7 +1088,7 @@ function RestaurantEditor({
               className="secondary-button"
               disabled={disabled}
             >
-              存为草稿
+              {t("存为草稿")}
             </button>
             <button
               type="submit"
@@ -981,11 +1101,13 @@ function RestaurantEditor({
               ) : (
                 <Check size={17} />
               )}
-              {busy
-                ? "正在保存…"
-                : form.status === "published"
-                  ? "保存并发布"
-                  : "保存修改"}
+              {t(
+                busy
+                  ? "正在保存…"
+                  : form.status === "published"
+                    ? "保存并发布"
+                    : "保存修改",
+              )}
             </button>
           </div>
         </div>

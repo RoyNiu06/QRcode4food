@@ -338,14 +338,20 @@ async function route(
       const id = crypto.randomUUID(),
         now = new Date().toISOString();
       await env.DB.prepare(
-        "INSERT INTO restaurants(id,name,address,category,description,url,image_id,status,sort_order,verified_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO restaurants(id,name,name_zh_hant,name_en,address,address_zh_hant,address_en,category,description,description_zh_hant,description_en,url,image_id,status,sort_order,verified_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       )
         .bind(
           id,
           data.name,
+          data.name_zh_hant,
+          data.name_en,
           data.address,
+          data.address_zh_hant,
+          data.address_en,
           data.category,
           data.description,
+          data.description_zh_hant,
+          data.description_en,
           data.url,
           data.image_id,
           data.status,
@@ -382,13 +388,19 @@ async function route(
         throw new InputError("图片不存在，请重新上传");
       const now = new Date().toISOString();
       await env.DB.prepare(
-        "UPDATE restaurants SET name=?,address=?,category=?,description=?,url=?,image_id=?,status=?,sort_order=?,verified_at=?,updated_at=? WHERE id=?",
+        "UPDATE restaurants SET name=?,name_zh_hant=?,name_en=?,address=?,address_zh_hant=?,address_en=?,category=?,description=?,description_zh_hant=?,description_en=?,url=?,image_id=?,status=?,sort_order=?,verified_at=?,updated_at=? WHERE id=?",
       )
         .bind(
           data.name,
+          data.name_zh_hant,
+          data.name_en,
           data.address,
+          data.address_zh_hant,
+          data.address_en,
           data.category,
           data.description,
+          data.description_zh_hant,
+          data.description_en,
           data.url,
           data.image_id,
           data.status,

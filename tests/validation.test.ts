@@ -41,6 +41,22 @@ test("publish only requires a name; optional metadata and URL may be omitted", (
   };
   assert.equal(validateRestaurant(data).name, "示例餐厅");
   assert.equal(
+    validateRestaurant({
+      name: "简体",
+      name_zh_hant: "繁體",
+      name_en: "English",
+      status: "published",
+    }).name_en,
+    "English",
+  );
+  assert.throws(() =>
+    validateRestaurant({
+      name: "简体",
+      name_en: "x".repeat(81),
+      status: "published",
+    }),
+  );
+  assert.equal(
     validateRestaurant({ name: "仅店名", status: "published" }).url,
     "",
   );

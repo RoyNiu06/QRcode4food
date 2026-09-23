@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
+import { localizedPlace, useLocale } from "./locale";
 import {
   QrCode,
   X,
@@ -42,8 +43,9 @@ export function CategoryIcon({
   return <Icon size={size} strokeWidth={1.6} aria-hidden="true" />;
 }
 export function Brand() {
+  const { t } = useLocale();
   return (
-    <a href="/" className="brand" aria-label="QRCode 首页">
+    <a href="/" className="brand" aria-label={`QRCode ${t("首页")}`}>
       <span className="brand-icon">
         <QrCode size={25} strokeWidth={2} />
       </span>
@@ -55,9 +57,10 @@ export function Brand() {
   );
 }
 export function Footer() {
+  const { t } = useLocale();
   return (
     <footer className="site-footer">
-      <span>附近好味，一点即达。</span>
+      <span>{t("附近好味，一点即达。")}</span>
       <span>
         Made for your next meal <span className="footer-mark">↗</span>
       </span>
@@ -75,6 +78,7 @@ export function Modal({
   onClose: () => void;
   wide?: boolean;
 }) {
+  const { t } = useLocale();
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   useEffect(() => {
@@ -103,7 +107,11 @@ export function Modal({
       <div className="modal-inner">
         <header className="modal-header">
           <h2 id={titleId}>{title}</h2>
-          <button className="icon-button" aria-label="关闭" onClick={onClose}>
+          <button
+            className="icon-button"
+            aria-label={t("关闭")}
+            onClick={onClose}
+          >
             <X size={22} />
           </button>
         </header>
@@ -113,10 +121,12 @@ export function Modal({
   );
 }
 export function PlacePill({ name }: { name: string }) {
+  const { locale, t } = useLocale();
+  const fullName = name ? localizedPlace(name, locale) : t("地点待设置");
   return (
-    <span className="place-pill">
+    <span className="place-pill" title={fullName} aria-label={fullName}>
       <MapPin size={15} />
-      <span>{name || "地点待设置"}</span>
+      <span>{locale === "en" && name === "香港城市大学" ? "CityUHK" : fullName}</span>
     </span>
   );
 }
@@ -144,9 +154,10 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   return data as T;
 }
 export function ErrorNotice({ message }: { message: string }) {
+  const { t } = useLocale();
   return message ? (
     <div className="notice error" role="alert">
-      {message}
+      {t(message)}
     </div>
   ) : null;
 }
