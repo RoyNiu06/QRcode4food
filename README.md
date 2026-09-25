@@ -1,4 +1,6 @@
-# QRCode
+# QRcode4food
+
+[![CityU Hub](https://cityu-hub.bond/badge/royniu06-qrcode4food.svg)](https://cityu-hub.bond/project/royniu06-qrcode4food)
 
 附近餐厅的轻量点餐目录。访客无需登录，点击餐厅或窗口进入商家网页；管理员在 `/admin` 上传二维码照片、自动识别网址并发布。
 
