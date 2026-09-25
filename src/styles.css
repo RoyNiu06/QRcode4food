@@ -195,6 +195,7 @@ img {
 }
 .intro-copy h1 > span {
   color: var(--accent);
+  white-space: nowrap;
 }
 .title-dot {
   color: var(--accent);
@@ -3226,7 +3227,7 @@ img {
 .rank-change.up { color:#23804b; }.rank-change.down { color:#c0443c; }.rank-change.same { color:#9a9d97; }.rank-change.new { color:#3379bc; }
 .ranking-legend { display:flex; align-items:center; gap:6px; margin:16px 0 0; color:#8a9087; font-size:11px; line-height:1.5; }
 .ranking-message { padding:24px 0; text-align:center; color:#899083; font-size:13px; }
-.intro-raffle { display:inline-flex; align-items:center; justify-content:center; gap:7px; flex-shrink:0; min-height:38px; margin-top:3px; padding:8px 12px; border:1px solid #ead4c7; border-radius:999px; background:#fffaf6; color:#a74e2e; font-size:12px; font-weight:700; white-space:nowrap; cursor:pointer; transition:background .18s,border-color .18s,transform .18s; }
+.intro-raffle { display:inline-flex; align-items:center; justify-content:center; gap:8px; flex-shrink:0; min-height:46px; margin-top:3px; padding:10px 16px; border:1px solid #ead4c7; border-radius:999px; background:#fffaf6; color:#a74e2e; font-size:14px; font-weight:700; white-space:nowrap; cursor:pointer; transition:background .18s,border-color .18s,transform .18s; }
 .intro-raffle:hover { background:#fff0e5; border-color:#d9a78e; transform:translateY(-1px); }
 .intro-raffle svg { flex-shrink:0; }
 .raffle-easter-line { padding:14px 5px 24px; color:#613c2a; font:600 clamp(20px,4vw,27px)/1.6 Georgia,"PingFang SC",serif; text-align:center; }
@@ -3237,8 +3238,8 @@ img {
 @media(max-width:700px) {
   .intro-section { display:flex; flex-direction:row; justify-content:space-between; align-items:flex-start; gap:8px; }
   .intro-copy { min-width:0; }
-  .intro-raffle { min-height:34px; margin-top:1px; padding:7px 9px; gap:5px; font-size:11px; }
-  .intro-raffle svg { width:14px; height:14px; }
+  .intro-raffle { min-height:44px; margin-top:1px; padding:10px 12px; gap:6px; font-size:12px; }
+  .intro-raffle svg { width:17px; height:17px; }
   .intro-copy h1 { font-size:28px; line-height:1.25; }
   .home-actions { margin-top:10px; }
   .home-actions .raffle-entry,.home-actions .contribute-entry,.ranking-entry { min-height:35px; padding:6px 9px; font-size:11px; }
